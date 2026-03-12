@@ -880,10 +880,16 @@
     // =========================================================
     // EVENTS
     // =========================================================
-    loadBtn.addEventListener("click", () => loadProductByCode(codeInput.value));
+    loadBtn.addEventListener("click", async () => {
+      userHasLoadedProduct = true;
+      await loadProductByCode(codeInput.value);
+    });
 
-    codeInput.addEventListener("keydown", (e) => {
-      if (e.key === "Enter") loadProductByCode(codeInput.value);
+    codeInput.addEventListener("keydown", async (e) => {
+      if (e.key === "Enter") {
+        userHasLoadedProduct = true;
+        await loadProductByCode(codeInput.value);
+      }
     });
 
     textInput.addEventListener("input", updateTextNode);
@@ -916,8 +922,10 @@
         }
 
         if (PRODUCTS.length) {
-          codeInput.value = PRODUCTS[0].code;
-          await loadProductByCode(PRODUCTS[0].code);
+          if (!userHasLoadedProduct && !codeInput.value.trim()) {
+             codeInput.value = PRODUCTS[0].code;
+             await loadProductByCode(PRODUCTS[0].code);
+          }
         } else {
           codeStatus.innerHTML = '<span class="err">No active products found in Google Sheets.</span>';
         }
@@ -930,4 +938,5 @@
     init();
   </script>
 </body>
+
 </html>
