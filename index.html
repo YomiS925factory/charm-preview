@@ -1,0 +1,933 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Charm Customizer</title>
+  <script src="https://cdn.jsdelivr.net/npm/konva@9/konva.min.js"></script>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: Arial, sans-serif;
+      background: #f6f7fb;
+      color: #222;
+    }
+    .app {
+      display: grid;
+      grid-template-columns: 380px 1fr;
+      min-height: 100vh;
+    }
+    .sidebar {
+      background: #fff;
+      padding: 20px;
+      border-right: 1px solid #e6e8ef;
+      overflow-y: auto;
+    }
+    .preview-panel {
+      padding: 20px;
+    }
+    h1 {
+      font-size: 24px;
+      margin: 0 0 8px;
+    }
+    .sub {
+      color: #666;
+      font-size: 13px;
+      margin-bottom: 18px;
+      line-height: 1.5;
+    }
+    .group {
+      margin-bottom: 18px;
+      padding: 14px;
+      background: #fafbff;
+      border: 1px solid #eaedf5;
+      border-radius: 12px;
+    }
+    .group h2 {
+      font-size: 15px;
+      margin: 0 0 12px;
+    }
+    label {
+      display: block;
+      font-size: 13px;
+      font-weight: 700;
+      margin-bottom: 6px;
+    }
+    input[type="text"], select, textarea {
+      width: 100%;
+      padding: 10px 12px;
+      border: 1px solid #d7ddea;
+      border-radius: 10px;
+      font-size: 14px;
+      margin-bottom: 10px;
+      background: #fff;
+    }
+    textarea {
+      min-height: 78px;
+      resize: vertical;
+    }
+    input[type="range"] {
+      width: 100%;
+    }
+    .row {
+      display: flex;
+      gap: 8px;
+    }
+    .row > * { flex: 1; }
+    button {
+      border: none;
+      border-radius: 10px;
+      padding: 10px 12px;
+      font-size: 14px;
+      cursor: pointer;
+    }
+    .btn-primary {
+      background: #1d4ed8;
+      color: white;
+    }
+    .btn-secondary {
+      background: #eef2ff;
+      color: #1e3a8a;
+    }
+    .btn-muted {
+      background: #f1f5f9;
+      color: #334155;
+    }
+    .btn-success {
+      background: #059669;
+      color: white;
+    }
+    .status {
+      font-size: 13px;
+      margin-top: 8px;
+      color: #475569;
+      min-height: 18px;
+      line-height: 1.5;
+    }
+    .font-preview {
+      margin-top: 8px;
+      font-size: 18px;
+      padding: 10px 12px;
+      border-radius: 10px;
+      background: white;
+      border: 1px dashed #d8deea;
+      min-height: 46px;
+      display: flex;
+      align-items: center;
+    }
+    #stage-wrap {
+      background: white;
+      border-radius: 16px;
+      border: 1px solid #e6e8ef;
+      padding: 16px;
+      box-shadow: 0 10px 30px rgba(15, 23, 42, 0.05);
+      overflow: auto;
+    }
+    .hint {
+      font-size: 13px;
+      color: #64748b;
+      margin-bottom: 12px;
+    }
+    .meta {
+      font-size: 13px;
+      color: #334155;
+      background: #fff;
+      border: 1px solid #e6e8ef;
+      border-radius: 10px;
+      padding: 10px 12px;
+      margin-top: 12px;
+      line-height: 1.7;
+    }
+    .small {
+      font-size: 12px;
+      color: #64748b;
+      line-height: 1.5;
+    }
+    .ok { color: #047857; }
+    .err { color: #b91c1c; }
+    @media (max-width: 920px) {
+      .app { grid-template-columns: 1fr; }
+      .sidebar { border-right: none; border-bottom: 1px solid #e6e8ef; }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <aside class="sidebar">
+      <h1>Charm Customizer</h1>
+      <div class="sub">
+        Load a product by code, preview engraving on the engraving side, validate the engraving area, then submit the order.
+      </div>
+
+      <div class="group">
+        <h2>1. Customer & Order</h2>
+        <label for="customerCodeInput">Customer Code</label>
+        <input id="customerCodeInput" type="text" placeholder="Example: CUST-001" />
+
+        <label for="orderNumberInput">Order Number</label>
+        <input id="orderNumberInput" type="text" placeholder="Will auto-generate if left blank" />
+
+        <div class="small">
+          Customer Code identifies the customer.<br>
+          Order Number identifies this order.
+        </div>
+      </div>
+
+      <div class="group">
+        <h2>2. Product Code</h2>
+        <label for="codeInput">Enter product code</label>
+        <div class="row">
+          <input id="codeInput" type="text" placeholder="Example: EA101" />
+          <button id="loadBtn" class="btn-primary">Load</button>
+        </div>
+        <div class="status" id="codeStatus">Ready.</div>
+      </div>
+
+      <div class="group">
+        <h2>3. Engraving Settings</h2>
+        <label for="textInput">Engraving Text</label>
+        <textarea id="textInput" maxlength="40" placeholder="Maria">Maria</textarea>
+
+        <label for="fontSelect">Font</label>
+        <select id="fontSelect"></select>
+
+        <label for="sizeRange">Size <span id="sizeLabel">28</span> px</label>
+        <input id="sizeRange" type="range" min="12" max="90" step="1" value="28" />
+
+        <div class="font-preview" id="fontPreview">Maria</div>
+      </div>
+
+      <div class="group">
+        <h2>4. Actions</h2>
+        <div class="row">
+          <button id="centerBtn" class="btn-secondary">Center Text</button>
+          <button id="resetBtn" class="btn-muted">Reset</button>
+        </div>
+        <div class="row" style="margin-top:8px;">
+          <button id="downloadBtn" class="btn-primary">Download Preview</button>
+          <button id="submitBtn" class="btn-success">Submit Order</button>
+        </div>
+        <div class="status" id="submitStatus"></div>
+      </div>
+    </aside>
+
+    <main class="preview-panel">
+      <div class="hint">
+        Left side shows Face A. Right side shows the engraving side.  
+        Drag the text on the engraving side and adjust size freely.
+      </div>
+      <div id="stage-wrap">
+        <div id="stage-container"></div>
+      </div>
+      <div class="meta" id="metaInfo">
+        <strong>Current product:</strong> None loaded<br>
+        <strong>Text:</strong> -<br>
+        <strong>Font:</strong> -<br>
+        <strong>Position:</strong> -<br>
+        <strong>Validation:</strong> -<br>
+        <strong>Customer Code:</strong> -<br>
+        <strong>Order Number:</strong> -
+      </div>
+    </main>
+  </div>
+
+  <script>
+    // =========================================================
+    // CONFIG
+    // =========================================================
+    const CONFIG = {
+      PRODUCTS_ENDPOINT: "https://opensheet.elk.sh/1K1OBZc294ZvIGc9avaqQXCwMHzfb9ThtM_V-nEXjulE/Products",
+      FONTS_ENDPOINT: "https://opensheet.elk.sh/1K1OBZc294ZvIGc9avaqQXCwMHzfb9ThtM_V-nEXjulE/Fonts",
+      ORDER_WEBHOOK_URL: "https://script.google.com/macros/s/AKfycbyy8GsTmHeYdgrmFi2wkN5pua7gilVpg-8v44jNucrHkN3XzW0jtcJWYD_JsZnbhiUWrQ/exec",
+      VALIDATION_THRESHOLD: 0.8
+    };
+
+    // =========================================================
+    // DOM
+    // =========================================================
+    const customerCodeInput = document.getElementById("customerCodeInput");
+    const orderNumberInput = document.getElementById("orderNumberInput");
+    const codeInput = document.getElementById("codeInput");
+    const loadBtn = document.getElementById("loadBtn");
+    const codeStatus = document.getElementById("codeStatus");
+    const textInput = document.getElementById("textInput");
+    const fontSelect = document.getElementById("fontSelect");
+    const sizeRange = document.getElementById("sizeRange");
+    const sizeLabel = document.getElementById("sizeLabel");
+    const fontPreview = document.getElementById("fontPreview");
+    const centerBtn = document.getElementById("centerBtn");
+    const resetBtn = document.getElementById("resetBtn");
+    const downloadBtn = document.getElementById("downloadBtn");
+    const submitBtn = document.getElementById("submitBtn");
+    const submitStatus = document.getElementById("submitStatus");
+    const metaInfo = document.getElementById("metaInfo");
+
+    // =========================================================
+    // DATA
+    // =========================================================
+    let PRODUCTS = [];
+    let FONTS = [];
+    let currentProduct = null;
+    let lastValidationText = "-";
+
+    // =========================================================
+    // STAGE
+    // =========================================================
+    const STAGE_WIDTH = 1100;
+    const STAGE_HEIGHT = 680;
+    const PANEL_SIZE = 420;
+    const PANEL_TOP = 110;
+
+    const stage = new Konva.Stage({
+      container: "stage-container",
+      width: STAGE_WIDTH,
+      height: STAGE_HEIGHT
+    });
+
+    const layer = new Konva.Layer();
+    stage.add(layer);
+
+    let faceAImageNode = null;
+    let faceBImageNode = null;
+    let engravingTextNode = null;
+    let editTargetImageNode = null;
+
+    // hidden helper canvas for pixel validation
+    const helperCanvas = document.createElement("canvas");
+    const helperCtx = helperCanvas.getContext("2d");
+
+    // =========================================================
+    // HELPERS
+    // =========================================================
+    function escapeHtml(str) {
+      return String(str)
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;");
+    }
+
+    function containSize(srcW, srcH, maxW, maxH) {
+      const ratio = Math.min(maxW / srcW, maxH / srcH);
+      return { width: srcW * ratio, height: srcH * ratio };
+    }
+
+    function generateOrderNumber() {
+      const now = new Date();
+      const pad = (n) => String(n).padStart(2, "0");
+      return "ORD-" +
+        now.getFullYear() +
+        pad(now.getMonth() + 1) +
+        pad(now.getDate()) + "-" +
+        pad(now.getHours()) +
+        pad(now.getMinutes()) +
+        pad(now.getSeconds());
+    }
+
+    function parseBool(v) {
+      return String(v).trim().toLowerCase() === "true";
+    }
+
+    function getSelectedFontObject() {
+      return FONTS.find(f => f.font_name === fontSelect.value) || FONTS[0];
+    }
+
+    function getSelectedFontFamily() {
+      const f = getSelectedFontObject();
+      return f ? f.font_name : "Arial";
+    }
+
+    function parseNumber(value, fallback) {
+      const n = Number(value);
+      return Number.isFinite(n) ? n : fallback;
+    }
+
+    // =========================================================
+    // LOAD PRODUCTS
+    // =========================================================
+    async function loadProducts() {
+      const response = await fetch(CONFIG.PRODUCTS_ENDPOINT);
+      if (!response.ok) throw new Error("Failed to load products");
+
+      const data = await response.json();
+
+      PRODUCTS = data
+        .map(item => ({
+          code: String(item.code || "").trim(),
+          name: String(item.name || "").trim(),
+          image_a_url: String(item.image_a_url || "").trim(),
+          image_b_url: String(item.image_b_url || "").trim(),
+          mask_url: String(item.mask_url || "").trim(),
+          use_mask: parseBool(item.use_mask || false),
+          engraving_side: String(item.engraving_side || "B").trim().toUpperCase(),
+          default_size: parseNumber(item.default_size, 28),
+          default_text: String(item.default_text || "Name").trim(),
+          active: String(item.active || "yes").trim().toLowerCase(),
+          notes: String(item.notes || "").trim()
+        }))
+        .filter(item => item.code && item.active !== "no");
+
+      return PRODUCTS;
+    }
+
+    // =========================================================
+    // LOAD FONTS
+    // =========================================================
+    async function loadFonts() {
+      const response = await fetch(CONFIG.FONTS_ENDPOINT);
+      if (!response.ok) throw new Error("Failed to load fonts");
+
+      const data = await response.json();
+
+      FONTS = data
+        .map(item => ({
+          font_name: String(item.font_name || "").trim(),
+          font_url: String(item.font_url || "").trim(),
+          font_type: String(item.font_type || "system").trim(),
+          active: String(item.active || "yes").trim().toLowerCase(),
+          sort_order: parseNumber(item.sort_order, 999)
+        }))
+        .filter(item => item.font_name && item.active !== "no")
+        .sort((a, b) => a.sort_order - b.sort_order);
+
+      if (FONTS.length === 0) {
+        FONTS = [
+          { font_name: "Arial", font_url: "", font_type: "system", active: "yes", sort_order: 1 },
+          { font_name: "Georgia", font_url: "", font_type: "system", active: "yes", sort_order: 2 }
+        ];
+      }
+
+      for (const font of FONTS) {
+        if (font.font_url) {
+          try {
+            const ff = new FontFace(font.font_name, `url(${font.font_url})`);
+            await ff.load();
+            document.fonts.add(ff);
+          } catch (err) {
+            console.warn("Failed to load font:", font.font_name, err);
+          }
+        }
+      }
+
+      renderFontSelect();
+      return FONTS;
+    }
+
+    function renderFontSelect() {
+      fontSelect.innerHTML = "";
+      FONTS.forEach(font => {
+        const option = document.createElement("option");
+        option.value = font.font_name;
+        option.textContent = font.font_name;
+        fontSelect.appendChild(option);
+      });
+      if (FONTS.length) fontSelect.value = FONTS[0].font_name;
+      updateFontPreview();
+    }
+
+    // =========================================================
+    // LOAD PRODUCT BY CODE
+    // =========================================================
+    async function loadProductByCode(code) {
+      if (!PRODUCTS.length) await loadProducts();
+
+      const normalized = String(code || "").trim().toLowerCase();
+      const product = PRODUCTS.find(p => p.code.toLowerCase() === normalized);
+
+      if (!product) {
+        codeStatus.innerHTML = '<span class="err">Code not found.</span>';
+        return;
+      }
+
+      currentProduct = product;
+      textInput.value = product.default_text || "Name";
+
+      codeStatus.innerHTML = `<span class="ok">Loaded: ${escapeHtml(product.code)} - ${escapeHtml(product.name)}</span>`;
+      await renderProduct(product);
+      updateMetaInfo();
+    }
+
+    // =========================================================
+    // RENDER PRODUCT
+    // =========================================================
+    async function renderProduct(product) {
+      layer.destroyChildren();
+      lastValidationText = "-";
+
+      const panelA = {
+        x: 80,
+        y: PANEL_TOP,
+        w: PANEL_SIZE,
+        h: PANEL_SIZE
+      };
+
+      const panelB = {
+        x: 600,
+        y: PANEL_TOP,
+        w: PANEL_SIZE,
+        h: PANEL_SIZE
+      };
+
+      layer.add(new Konva.Text({
+        x: panelA.x,
+        y: 50,
+        text: "Face A",
+        fontSize: 24,
+        fontStyle: "bold",
+        fill: "#1e293b"
+      }));
+
+      layer.add(new Konva.Text({
+        x: panelB.x,
+        y: 50,
+        text: "Engraving Face",
+        fontSize: 24,
+        fontStyle: "bold",
+        fill: "#1e293b"
+      }));
+
+      faceAImageNode = await createImageNode(product.image_a_url, panelA);
+      faceBImageNode = await createImageNode(product.image_b_url, panelB);
+
+      layer.add(faceAImageNode);
+      layer.add(faceBImageNode);
+
+      editTargetImageNode = product.engraving_side === "A" ? faceAImageNode : faceBImageNode;
+
+      engravingTextNode = new Konva.Text({
+        x: editTargetImageNode.x() + 40,
+        y: editTargetImageNode.y() + 60,
+        text: textInput.value || "Name",
+        fontSize: product.default_size || 28,
+        fontFamily: getSelectedFontFamily(),
+        fill: "rgba(20, 20, 20, 0.88)",
+        draggable: true,
+        width: editTargetImageNode.width() - 80,
+        align: "center"
+      });
+
+      engravingTextNode.on("dragmove", updateMetaInfo);
+      layer.add(engravingTextNode);
+
+      sizeRange.value = product.default_size || 28;
+      sizeLabel.textContent = sizeRange.value;
+
+      updateTextNode();
+      centerText();
+      layer.draw();
+    }
+
+    function createImageNode(url, panel) {
+      return new Promise((resolve, reject) => {
+        Konva.Image.fromURL(url, function(imageNode) {
+          const img = imageNode.image();
+          const fit = containSize(img.width, img.height, panel.w, panel.h);
+
+          imageNode.setAttrs({
+            x: panel.x + (panel.w - fit.width) / 2,
+            y: panel.y + (panel.h - fit.height) / 2,
+            width: fit.width,
+            height: fit.height
+          });
+
+          resolve(imageNode);
+        }, function() {
+          reject(new Error("Image failed to load: " + url));
+        });
+      });
+    }
+
+    // =========================================================
+    // TEXT UPDATE
+    // =========================================================
+    function updateFontPreview() {
+      const txt = textInput.value || "Name";
+      const family = getSelectedFontFamily();
+      fontPreview.textContent = txt;
+      fontPreview.style.fontFamily = family;
+    }
+
+    function updateTextNode() {
+      if (!engravingTextNode || !currentProduct) return;
+
+      engravingTextNode.fontFamily(getSelectedFontFamily());
+      engravingTextNode.fontSize(parseInt(sizeRange.value, 10));
+      engravingTextNode.text(textInput.value || " ");
+      engravingTextNode.width(editTargetImageNode.width() - 80);
+
+      layer.draw();
+      updateFontPreview();
+      updateMetaInfo();
+    }
+
+    function centerText() {
+      if (!engravingTextNode || !editTargetImageNode) return;
+      engravingTextNode.x(editTargetImageNode.x() + 40);
+      engravingTextNode.y(editTargetImageNode.y() + (editTargetImageNode.height() - engravingTextNode.height()) / 2);
+      layer.draw();
+      updateMetaInfo();
+    }
+
+    function resetText() {
+      if (!currentProduct) return;
+      textInput.value = currentProduct.default_text || "Name";
+      if (FONTS.length) fontSelect.value = FONTS[0].font_name;
+      sizeRange.value = currentProduct.default_size || 28;
+      sizeLabel.textContent = sizeRange.value;
+      updateTextNode();
+      centerText();
+    }
+
+    // =========================================================
+    // VALIDATION
+    // =========================================================
+    function validateCurrentEngraving() {
+      if (!currentProduct || !engravingTextNode || !editTargetImageNode) {
+        return { ok: false, mode: "-", message: "No product loaded." };
+      }
+
+      if (currentProduct.use_mask && currentProduct.mask_url) {
+        return validateByMask();
+      } else {
+        return validateByTransparency();
+      }
+    }
+
+    function validateByTransparency() {
+      const mode = "auto";
+      const rect = getTextBoundingRect();
+      const img = editTargetImageNode.image();
+
+      helperCanvas.width = img.width;
+      helperCanvas.height = img.height;
+      helperCtx.clearRect(0, 0, helperCanvas.width, helperCanvas.height);
+      helperCtx.drawImage(img, 0, 0, img.width, img.height);
+
+      const imageLocalRect = convertStageRectToImageRect(rect, editTargetImageNode, img.width, img.height);
+      const sample = sampleCoverage(imageLocalRect, helperCtx, false);
+
+      if (sample.ratio >= CONFIG.VALIDATION_THRESHOLD) {
+        return { ok: true, mode, message: "Pass" };
+      }
+
+      return {
+        ok: false,
+        mode,
+        message: "Text exceeds the engraving area. Please adjust the position or reduce the size."
+      };
+    }
+
+    async function loadMaskImage(url) {
+      return new Promise((resolve, reject) => {
+        const img = new Image();
+        img.crossOrigin = "anonymous";
+        img.onload = () => resolve(img);
+        img.onerror = () => reject(new Error("Mask failed to load"));
+        img.src = url;
+      });
+    }
+
+    function convertStageRectToImageRect(stageRect, imageNode, rawWidth, rawHeight) {
+      const scaleX = rawWidth / imageNode.width();
+      const scaleY = rawHeight / imageNode.height();
+
+      return {
+        x: Math.max(0, (stageRect.x - imageNode.x()) * scaleX),
+        y: Math.max(0, (stageRect.y - imageNode.y()) * scaleY),
+        width: stageRect.width * scaleX,
+        height: stageRect.height * scaleY
+      };
+    }
+
+    function getTextBoundingRect() {
+      return {
+        x: engravingTextNode.x(),
+        y: engravingTextNode.y(),
+        width: engravingTextNode.width(),
+        height: engravingTextNode.height()
+      };
+    }
+
+    function sampleCoverage(rect, ctx, isMask) {
+      const stepsX = 18;
+      const stepsY = 10;
+      let inside = 0;
+      let total = 0;
+
+      for (let ix = 0; ix < stepsX; ix++) {
+        for (let iy = 0; iy < stepsY; iy++) {
+          const px = Math.floor(rect.x + rect.width * (ix + 0.5) / stepsX);
+          const py = Math.floor(rect.y + rect.height * (iy + 0.5) / stepsY);
+
+          const data = ctx.getImageData(px, py, 1, 1).data;
+          const alpha = data[3];
+
+          let ok = false;
+
+          if (isMask) {
+            const brightness = (data[0] + data[1] + data[2]) / 3;
+            ok = alpha > 0 && brightness > 180;
+          } else {
+            ok = alpha > 10;
+          }
+
+          if (ok) inside++;
+          total++;
+        }
+      }
+
+      return {
+        inside,
+        total,
+        ratio: total ? inside / total : 0
+      };
+    }
+
+    function validateByMask() {
+      // synchronous wrapper is not possible with remote image loading
+      // this function returns a placeholder and actual validation is done in submitOrder
+      return { ok: true, mode: "mask", message: "Mask validation pending" };
+    }
+
+    async function validateByMaskAsync() {
+      const mode = "mask";
+      const rect = getTextBoundingRect();
+      const maskImg = await loadMaskImage(currentProduct.mask_url);
+
+      helperCanvas.width = maskImg.width;
+      helperCanvas.height = maskImg.height;
+      helperCtx.clearRect(0, 0, helperCanvas.width, helperCanvas.height);
+      helperCtx.drawImage(maskImg, 0, 0, maskImg.width, maskImg.height);
+
+      const imageLocalRect = convertStageRectToImageRect(rect, editTargetImageNode, maskImg.width, maskImg.height);
+      const sample = sampleCoverage(imageLocalRect, helperCtx, true);
+
+      if (sample.ratio >= CONFIG.VALIDATION_THRESHOLD) {
+        return { ok: true, mode, message: "Pass" };
+      }
+
+      return {
+        ok: false,
+        mode,
+        message: "Text exceeds the engraving area. Please adjust the position or reduce the size."
+      };
+    }
+
+    // =========================================================
+    // PREVIEW EXPORT
+    // =========================================================
+    function buildCombinedPreviewDataURL() {
+      const exportStage = new Konva.Stage({
+        container: document.createElement("div"),
+        width: STAGE_WIDTH,
+        height: STAGE_HEIGHT
+      });
+      const exportLayer = new Konva.Layer();
+      exportStage.add(exportLayer);
+
+      const faceAClone = faceAImageNode.clone();
+      const faceBClone = faceBImageNode.clone();
+      const textClone = engravingTextNode.clone();
+
+      exportLayer.add(new Konva.Text({
+        x: 80,
+        y: 50,
+        text: "Face A",
+        fontSize: 24,
+        fontStyle: "bold",
+        fill: "#1e293b"
+      }));
+
+      exportLayer.add(new Konva.Text({
+        x: 600,
+        y: 50,
+        text: "Engraving Face",
+        fontSize: 24,
+        fontStyle: "bold",
+        fill: "#1e293b"
+      }));
+
+      exportLayer.add(faceAClone);
+      exportLayer.add(faceBClone);
+      exportLayer.add(textClone);
+      exportLayer.draw();
+
+      const dataURL = exportStage.toDataURL({ pixelRatio: 2 });
+      exportStage.destroy();
+      return dataURL;
+    }
+
+    function downloadPreview() {
+      if (!currentProduct) {
+        alert("Please load a product first.");
+        return;
+      }
+
+      const dataURL = buildCombinedPreviewDataURL();
+      const link = document.createElement("a");
+      link.href = dataURL;
+      link.download = `${currentProduct.code}_AB_preview.png`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    }
+
+    // =========================================================
+    // META
+    // =========================================================
+    function updateMetaInfo() {
+      const productText = currentProduct
+        ? `${escapeHtml(currentProduct.code)} - ${escapeHtml(currentProduct.name)}`
+        : "None loaded";
+
+      const textValue = engravingTextNode ? escapeHtml(engravingTextNode.text()) : "-";
+      const fontValue = engravingTextNode ? `${escapeHtml(getSelectedFontFamily())} / ${engravingTextNode.fontSize()} px` : "-";
+      const posValue = engravingTextNode ? `x=${Math.round(engravingTextNode.x())}, y=${Math.round(engravingTextNode.y())}` : "-";
+      const customerCode = escapeHtml(customerCodeInput.value || "-");
+      const orderNumber = escapeHtml(orderNumberInput.value || "-");
+
+      metaInfo.innerHTML = `
+        <strong>Current product:</strong> ${productText}<br>
+        <strong>Text:</strong> ${textValue}<br>
+        <strong>Font:</strong> ${fontValue}<br>
+        <strong>Position:</strong> ${posValue}<br>
+        <strong>Validation:</strong> ${escapeHtml(lastValidationText)}<br>
+        <strong>Customer Code:</strong> ${customerCode}<br>
+        <strong>Order Number:</strong> ${orderNumber}
+      `;
+    }
+
+    // =========================================================
+    // SUBMIT ORDER
+    // =========================================================
+    async function submitOrder() {
+      if (!currentProduct || !engravingTextNode) {
+        submitStatus.innerHTML = '<span class="err">Please load a product first.</span>';
+        return;
+      }
+
+      if (!customerCodeInput.value.trim()) {
+        submitStatus.innerHTML = '<span class="err">Please enter Customer Code.</span>';
+        return;
+      }
+
+      if (!orderNumberInput.value.trim()) {
+        orderNumberInput.value = generateOrderNumber();
+      }
+
+      if (!CONFIG.ORDER_WEBHOOK_URL || CONFIG.ORDER_WEBHOOK_URL === "YOUR_GOOGLE_APPS_SCRIPT_WEB_APP_URL") {
+        submitStatus.innerHTML = '<span class="err">Please set ORDER_WEBHOOK_URL in index.html first.</span>';
+        return;
+      }
+
+      submitStatus.textContent = "Validating...";
+      submitStatus.className = "status";
+
+      let validation;
+
+      if (currentProduct.use_mask && currentProduct.mask_url) {
+        validation = await validateByMaskAsync();
+      } else {
+        validation = validateByTransparency();
+      }
+
+      lastValidationText = `${validation.mode} / ${validation.ok ? "pass" : "fail"}`;
+      updateMetaInfo();
+
+      if (!validation.ok) {
+        submitStatus.innerHTML = `<span class="err">${escapeHtml(validation.message)}</span>`;
+        return;
+      }
+
+      const previewImage = buildCombinedPreviewDataURL();
+
+      const payload = {
+        order_number: orderNumberInput.value.trim(),
+        customer_code: customerCodeInput.value.trim(),
+        product_code: currentProduct.code,
+        product_name: currentProduct.name,
+        engraving_side: currentProduct.engraving_side,
+        engraving_text: engravingTextNode.text(),
+        font_name: getSelectedFontFamily(),
+        font_size: engravingTextNode.fontSize(),
+        pos_x: Math.round(engravingTextNode.x()),
+        pos_y: Math.round(engravingTextNode.y()),
+        validation_mode: currentProduct.use_mask ? "mask" : "auto",
+        validation_result: "pass",
+        preview_image: previewImage,
+        remarks: ""
+      };
+
+      try {
+        submitStatus.textContent = "Submitting order...";
+        submitStatus.className = "status";
+
+        const response = await fetch(CONFIG.ORDER_WEBHOOK_URL, {
+          method: "POST",
+          headers: { "Content-Type": "text/plain;charset=utf-8" },
+          body: JSON.stringify(payload)
+        });
+
+        const text = await response.text();
+        if (!response.ok) throw new Error(text || "Submit failed");
+
+        submitStatus.innerHTML = '<span class="ok">Order submitted successfully.</span>';
+      } catch (error) {
+        submitStatus.innerHTML = `<span class="err">Submit failed: ${escapeHtml(error.message)}</span>`;
+      }
+    }
+
+    // =========================================================
+    // EVENTS
+    // =========================================================
+    loadBtn.addEventListener("click", () => loadProductByCode(codeInput.value));
+
+    codeInput.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") loadProductByCode(codeInput.value);
+    });
+
+    textInput.addEventListener("input", updateTextNode);
+    fontSelect.addEventListener("change", updateTextNode);
+
+    sizeRange.addEventListener("input", () => {
+      sizeLabel.textContent = sizeRange.value;
+      updateTextNode();
+      updateMetaInfo();
+    });
+
+    centerBtn.addEventListener("click", centerText);
+    resetBtn.addEventListener("click", resetText);
+    downloadBtn.addEventListener("click", downloadPreview);
+    submitBtn.addEventListener("click", submitOrder);
+
+    customerCodeInput.addEventListener("input", updateMetaInfo);
+    orderNumberInput.addEventListener("input", updateMetaInfo);
+
+    // =========================================================
+    // INIT
+    // =========================================================
+    async function init() {
+      try {
+        await loadFonts();
+        await loadProducts();
+
+        if (!orderNumberInput.value.trim()) {
+          orderNumberInput.value = generateOrderNumber();
+        }
+
+        if (PRODUCTS.length) {
+          codeInput.value = PRODUCTS[0].code;
+          await loadProductByCode(PRODUCTS[0].code);
+        } else {
+          codeStatus.innerHTML = '<span class="err">No active products found in Google Sheets.</span>';
+        }
+      } catch (error) {
+        console.error(error);
+        codeStatus.innerHTML = `<span class="err">Init failed: ${escapeHtml(error.message)}</span>`;
+      }
+    }
+
+    init();
+  </script>
+</body>
+</html>
