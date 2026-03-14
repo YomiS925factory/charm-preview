@@ -159,6 +159,24 @@
       padding: 4px 8px;
     }
 
+    .engraving-info-box{
+      position: absolute;
+      right: 12px;
+      bottom: 12px;
+      width: 240px;
+      min-height: 130px;
+      background: rgba(255,255,255,0.96);
+      border: 2px solid #2d9cff;
+      border-radius: 8px;
+      padding: 10px 12px;
+      font-size: 12px;
+      line-height: 1.45;
+      color: #222;
+      white-space: pre-line;
+      z-index: 20;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+    }
+
     .preview-actions {
       display: flex;
       gap: 10px;
@@ -336,6 +354,7 @@
       <div id="previewWrapper" class="preview-wrapper">
         <img id="productBaseImage" src="" alt="Carved surface rendering" />
         <div id="textLayer">Your Text</div>
+        <div id="engravingInfoBox" class="engraving-info-box"></div>
       </div>
 
       <div class="preview-actions">
@@ -449,6 +468,7 @@
       productSearchInput: document.getElementById("productSearchInput"),
       categoryFilter: document.getElementById("categoryFilter"),
       clearSearchBtn: document.getElementById("clearSearchBtn"),
+      engravingInfoBox: document.getElementById("engravingInfoBox"),
 
       currentProductThumb: document.getElementById("currentProductThumb"),
       currentProductSku: document.getElementById("currentProductSku"),
@@ -486,6 +506,9 @@
         if (state.products.length > 0) {
           selectProduct(state.products[0].sku);
         }
+
+        updateEngravingInfoBox();
+        
       } catch (error) {
         console.error("初始化失败:", error);
         alert("初始化失败，请检查 Google Apps Script 接口地址和表格数据。");
@@ -639,6 +662,8 @@
       dom.currentProductName.textContent = product.name_cn || product.name_en || "";
       dom.currentProductCategory.value = product.category || "";
       dom.maxCharsDisplay.value = product.max_chars || "";
+
+      updateEngravingInfoBox();
     }
 
     /********************
@@ -696,6 +721,8 @@
       } else {
         dom.textLayer.style.textAlign = "center";
       }
+      
+      updateEngravingInfoBox();
     }
 
     /********************
@@ -712,7 +739,8 @@
      * 更新字体
      ********************/
     function updateFont(fontName) {
-      dom.textLayer.style.fontFamily = fontName || "Arial";
+      dom.textLayer.style.fontFamily = `'${fontName}', Arial, sans-serif`;
+      updateEngravingInfoBox();
     }
 
     /********************
@@ -720,11 +748,13 @@
      ********************/
     function updateFontSize(size) {
       const fontSize = Number(size || 28);
-      state.currentFontSize = fontSize;
-      dom.textLayer.style.fontSize = fontSize + "px";
-      dom.fontSizeRange.value = fontSize;
-      dom.fontSizeInput.value = fontSize;
-    }
+        state.currentFontSize = fontSize;
+        dom.textLayer.style.fontSize = fontSize + "px";
+        dom.fontSizeRange.value = fontSize;
+        dom.fontSizeInput.value = fontSize;
+
+        updateEngravingInfoBox();
+      }
 
     /********************
      * 更新旋转
@@ -735,6 +765,8 @@
       dom.rotationRange.value = value;
       dom.rotationInput.value = value;
       applyTextTransform();
+
+      updateEngravingInfoBox();
     }
 
     function applyTextTransform() {
@@ -752,6 +784,8 @@
 
       dom.textLayer.style.left = x + "px";
       dom.textLayer.style.top = y + "px";
+      
+      updateEngravingInfoBox();
     }
 
     /********************
@@ -770,24 +804,87 @@
      ********************/
     async function downloadPreview() {
       try {
-        const canvas = await html2canvas(dom.previewWrapper, {
-          backgroundColor: null,
-          scale: Number(state.settings.export_scale || 2),
-          useCORS: true
+        function updatePreviewText(text) {
+          const maxChars = Number(state.currentProduct?.max_chars || 999);
+          const finalText = (text || "").slice(0, maxChars);
+
+          dom.userText.value = finalText;
+          dom.textLayer.textContent = finalText || (state.settings.default_text || "Your Text");
+
+          updateEngravingInfoBox();
         });
 
         const link = document.createElement("a");
         const sku = state.currentProduct?.sku || "preview";
         const now = new Date();
-        const timeStr = `${now.getHours()}${now.getMinutes()}${now.getSeconds()}`;
+        const timeStr = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, "0")}${String(now.getDate()).padStart(2, "0")}_${String(now.getHours()).padStart(2, "0")}${String(now.getMinutes()).padStart(2, "0")}${String(now.getSeconds()).padStart(2, "0")}`;
+
         link.download = `${sku}_${timeStr}.png`;
         link.href = canvas.toDataURL("image/png");
         link.click();
       } catch (err) {
-        console.error("导出失败:", err);
-        alert("导出失败，请检查图片是否允许跨域访问。");
+        console.error("Export failed:", err);
+        alert("Export failed. Please check whether the image allows cross-origin access.");
       }
     }
+
+    function getTextLayerPosition() {
+      const wrapperRect = dom.previewWrapper.getBoundingClientRect();
+      const textRect = dom.textLayer.getBoundingClientRect();
+
+      const x = Math.round(textRect.left - wrapperRect.left);
+      const y = Math.round(textRect.top - wrapperRect.top);
+
+      const centerX = Math.round((textRect.left + textRect.width / 2) - wrapperRect.left);
+      const centerY = Math.round((textRect.top + textRect.height / 2) - wrapperRect.top);
+
+      return {
+        x,
+        y,
+        centerX,
+        centerY
+      };
+    }
+
+    function getEngravingData() {
+      const pos = getTextLayerPosition();
+
+      return {
+        productCode: state.currentProduct?.sku || "",
+        productName: state.currentProduct?.name_en || state.currentProduct?.name_cn || "",
+        text: dom.userText?.value || dom.textLayer.textContent || "",
+        fontName: dom.fontSelect?.value || "",
+        fontSize: dom.fontSizeInput?.value || state.currentFontSize || "",
+        rotation: state.currentRotation || 0,
+        color: dom.textColor?.value || "#000000",
+        x: pos.x,
+        y: pos.y,
+        centerX: pos.centerX,
+        centerY: pos.centerY
+      };
+    }
+
+    function buildEngravingInfoText() {
+      const data = getEngravingData();
+
+      return [
+        `Product: ${data.productCode}`,
+        `Name: ${data.productName}`,
+        `Text: ${data.text.replace(/\n/g, " / ")}`,
+        `Font: ${data.fontName}`,
+        `Size: ${data.fontSize}`,
+        `Rotation: ${data.rotation}°`,
+        `X: ${data.x}`,
+        `Y: ${data.y}`,
+        `Center: (${data.centerX}, ${data.centerY})`,
+        `Color: ${data.color}`
+      ].join("\n");
+    }
+
+function updateEngravingInfoBox() {
+  if (!dom.engravingInfoBox) return;
+  dom.engravingInfoBox.textContent = buildEngravingInfoText();
+}
 
     /********************
      * 拖拽文字
@@ -820,6 +917,7 @@
       document.addEventListener("mouseup", () => {
         state.drag.active = false;
         document.body.style.userSelect = "";
+        updateEngravingInfoBox();
       });
     }
 
@@ -889,6 +987,8 @@ dom.fontSelect.addEventListener("keyup", (e) => {
 
       dom.textColor.addEventListener("input", (e) => {
         dom.textLayer.style.color = e.target.value;
+        
+        updateEngravingInfoBox();
       });
 
       dom.downloadBtn.addEventListener("click", downloadPreview);
