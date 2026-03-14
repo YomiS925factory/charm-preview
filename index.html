@@ -126,6 +126,10 @@
    ********************/
   async function initApp() {
     try {
+      console.log("initApp started");
+      console.log("fontSelect:", dom.fontSelect);
+      console.log("productBaseImage:", dom.productBaseImage);
+      console.log("engravingInfoBox:", dom.engravingInfoBox);
       await loadAllData();
       renderCategoryFilter();
       await renderFontOptions();
@@ -139,7 +143,7 @@
       }
     } catch (error) {
       console.error("Initialization failed:", error);
-      alert("Initialization failed. Please check the Google Apps Script API URL and sheet data.");
+      alert("Initialization failed: " + error.message);
     }
   }
 
