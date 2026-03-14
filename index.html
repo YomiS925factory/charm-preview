@@ -1,707 +1,918 @@
-<script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Charm Preview</title>
 
-<script>
-  /********************
-   * API
-   ********************/
-  const API_BASE_URL = "https://script.google.com/macros/s/AKfycbyy8GsTmHeYdgrmFi2wkN5pua7gilVpg-8v44jNucrHkN3XzW0jtcJWYD_JsZnbhiUWrQ/exec";
-
-  /********************
-   * 全局状态
-   ********************/
-  const state = {
-    products: [],
-    fonts: [],
-    categories: [],
-    settings: {},
-    currentProduct: null,
-    currentRotation: 0,
-    currentFontSize: 28,
-    drag: {
-      active: false,
-      offsetX: 0,
-      offsetY: 0
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: Arial, sans-serif;
     }
-  };
 
-  /********************
-   * DOM
-   ********************/
-  const dom = {
-    openProductBrowser: document.getElementById("openProductBrowser"),
-    closeProductBrowser: document.getElementById("closeProductBrowser"),
-    productBrowserModal: document.getElementById("productBrowserModal"),
-    productGrid: document.getElementById("productGrid"),
-    productSearchInput: document.getElementById("productSearchInput"),
-    categoryFilter: document.getElementById("categoryFilter"),
-    clearSearchBtn: document.getElementById("clearSearchBtn"),
+    body {
+      background: #f5f6f8;
+      color: #222;
+    }
 
-    currentProductThumb: document.getElementById("currentProductThumb"),
-    currentProductSku: document.getElementById("currentProductSku"),
-    currentProductName: document.getElementById("currentProductName"),
-    currentProductCategory: document.getElementById("currentProductCategory"),
-    maxCharsDisplay: document.getElementById("maxCharsDisplay"),
+    .app {
+      display: grid;
+      grid-template-columns: 280px 1fr 320px;
+      gap: 16px;
+      padding: 16px;
+      min-height: 100vh;
+    }
 
-    productBaseImage: document.getElementById("productBaseImage"),
-    textLayer: document.getElementById("textLayer"),
-    previewWrapper: document.getElementById("previewWrapper"),
-    engravingInfoBox: document.getElementById("engravingInfoBox"),
+    .panel {
+      background: #fff;
+      border-radius: 12px;
+      padding: 16px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.06);
+    }
 
-    userText: document.getElementById("userText"),
-    fontSelect: document.getElementById("fontSelect"),
-    fontSizeRange: document.getElementById("fontSizeRange"),
-    fontSizeInput: document.getElementById("fontSizeInput"),
-    rotationRange: document.getElementById("rotationRange"),
-    rotationInput: document.getElementById("rotationInput"),
-    resetRotation: document.getElementById("resetRotation"),
-    textColor: document.getElementById("textColor"),
-    downloadBtn: document.getElementById("downloadBtn"),
-    resetTextPositionBtn: document.getElementById("resetTextPositionBtn")
-  };
+    .panel h2 {
+      font-size: 18px;
+      margin-bottom: 12px;
+    }
 
-  /********************
-   * 工具函数
-   ********************/
-  function escapeHtml(str) {
-    return String(str ?? "")
-      .replaceAll("&", "&amp;")
-      .replaceAll("<", "&lt;")
-      .replaceAll(">", "&gt;")
-      .replaceAll('"', "&quot;")
-      .replaceAll("'", "&#039;");
-  }
+    .btn {
+      display: inline-block;
+      padding: 10px 14px;
+      background: #2d6cdf;
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 14px;
+    }
 
-  function isEnabled(value) {
-    const v = String(value ?? "").trim().toLowerCase();
-    return v === "" || v === "active" || v === "yes" || v === "true";
-  }
+    .btn:hover {
+      background: #1f57b7;
+    }
 
-  function getProductKey(product) {
-    return product?.sku || product?.code || "";
-  }
+    .btn-secondary {
+      background: #666;
+    }
 
-  function getProductName(product) {
-    return product?.name_en || product?.name_cn || product?.name || "";
-  }
+    .btn-secondary:hover {
+      background: #555;
+    }
 
-  function getProductCategory(product) {
-    return product?.category || product?.product_type || "";
-  }
+    .field {
+      margin-bottom: 14px;
+    }
 
-  function getProductMainImage(product) {
-    return (
-      product?.main_image ||
-      product?.thumb_image ||
-      product?.preview_image ||
-      product?.image_a_url ||
-      product?.image_b_url ||
-      ""
-    );
-  }
+    .field label {
+      display: block;
+      font-size: 13px;
+      margin-bottom: 6px;
+      color: #555;
+    }
 
-  function getProductPreviewImage(product) {
-    return (
-      product?.preview_image ||
-      product?.main_image ||
-      product?.image_b_url ||
-      product?.image_a_url ||
-      ""
-    );
-  }
+    .field input[type="text"],
+    .field input[type="number"],
+    .field select {
+      width: 100%;
+      padding: 10px;
+      border: 1px solid #d9d9d9;
+      border-radius: 8px;
+      font-size: 14px;
+    }
 
-  function getFontName(font) {
-    return font?.font_name || font?.name || "";
-  }
+    .field input[type="range"] {
+      width: 100%;
+    }
 
-  function getFontDisplayName(font) {
-    return font?.display_name || font?.font_name || font?.name || "";
-  }
+    .current-product {
+      margin-top: 16px;
+      border: 1px solid #eee;
+      border-radius: 10px;
+      padding: 12px;
+      background: #fafafa;
+    }
 
-  function getFontUrl(font) {
-    return font?.font_url || font?.url || "";
-  }
+    .current-product img {
+      width: 100%;
+      max-height: 220px;
+      object-fit: contain;
+      border-radius: 8px;
+      background: #fff;
+      border: 1px solid #eee;
+    }
 
-  /********************
-   * 初始化
-   ********************/
-  async function initApp() {
-    try {
-      console.log("initApp started");
-      console.log("fontSelect:", dom.fontSelect);
-      console.log("productBaseImage:", dom.productBaseImage);
-      console.log("engravingInfoBox:", dom.engravingInfoBox);
-      await loadAllData();
-      renderCategoryFilter();
-      await renderFontOptions();
-      renderProductBrowser();
-      bindEvents();
+    .current-product .sku {
+      margin-top: 10px;
+      font-weight: bold;
+      font-size: 15px;
+    }
 
-      if (state.products.length > 0) {
-        selectProduct(getProductKey(state.products[0]));
-      } else {
-        updateEngravingInfoBox();
+    .current-product .name {
+      margin-top: 6px;
+      color: #555;
+      font-size: 14px;
+    }
+
+    .preview-panel {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    .preview-wrapper {
+      width: 100%;
+      max-width: 800px;
+      aspect-ratio: 1 / 1;
+      background: #fff;
+      border: 1px solid #e8e8e8;
+      border-radius: 12px;
+      position: relative;
+      overflow: hidden;
+      margin-bottom: 16px;
+    }
+
+    #productBaseImage {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      display: block;
+      user-select: none;
+      pointer-events: none;
+    }
+
+    #textLayer {
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      transform: translate(-50%, -50%) rotate(0deg);
+      transform-origin: center center;
+      min-width: 40px;
+      min-height: 20px;
+      text-align: center;
+      color: #111;
+      font-size: 28px;
+      white-space: pre;
+      cursor: move;
+      user-select: none;
+      padding: 4px 8px;
+    }
+
+    .preview-actions {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+
+    .row-inline {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .row-inline input[type="number"] {
+      width: 90px;
+    }
+
+    .hint {
+      font-size: 12px;
+      color: #888;
+      margin-top: 4px;
+      line-height: 1.5;
+    }
+
+    /* Modal */
+    .modal {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.45);
+      z-index: 999;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+
+    .modal.show {
+      display: flex;
+    }
+
+    .modal-content {
+      width: min(1100px, 100%);
+      max-height: 90vh;
+      overflow: hidden;
+      background: #fff;
+      border-radius: 14px;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .modal-header {
+      padding: 16px;
+      border-bottom: 1px solid #eee;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .modal-header h3 {
+      font-size: 18px;
+    }
+
+    .modal-body {
+      padding: 16px;
+      overflow: auto;
+    }
+
+    .browser-toolbar {
+      display: grid;
+      grid-template-columns: 1fr 180px 120px;
+      gap: 10px;
+      margin-bottom: 16px;
+    }
+
+    .product-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+      gap: 12px;
+    }
+
+    .product-card {
+      border: 1px solid #eee;
+      border-radius: 10px;
+      padding: 10px;
+      cursor: pointer;
+      transition: 0.2s;
+      background: #fff;
+    }
+
+    .product-card:hover {
+      border-color: #2d6cdf;
+      box-shadow: 0 3px 10px rgba(0,0,0,0.08);
+      transform: translateY(-2px);
+    }
+
+    .product-card.active {
+      border-color: #2d6cdf;
+      background: #f2f7ff;
+    }
+
+    .product-card img {
+      width: 100%;
+      aspect-ratio: 1 / 1;
+      object-fit: contain;
+      background: #fafafa;
+      border-radius: 8px;
+      border: 1px solid #f0f0f0;
+    }
+
+    .product-card .sku {
+      margin-top: 8px;
+      font-size: 13px;
+      font-weight: bold;
+    }
+
+    .product-card .name {
+      margin-top: 4px;
+      font-size: 13px;
+      color: #555;
+      min-height: 32px;
+    }
+
+    .product-card .category {
+      margin-top: 4px;
+      font-size: 12px;
+      color: #888;
+    }
+
+    .loading,
+    .empty {
+      text-align: center;
+      color: #777;
+      padding: 30px 10px;
+      font-size: 14px;
+    }
+
+    @media (max-width: 1100px) {
+      .app {
+        grid-template-columns: 1fr;
       }
-    } catch (error) {
-      console.error("Initialization failed:", error);
-      alert("Initialization failed: " + error.message);
     }
-  }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <!-- 左侧 -->
+    <div class="panel">
+      <h2>Product Info</h2>
 
-  /********************
-   * 数据加载
-   ********************/
-  async function loadAllData() {
-    const url = API_BASE_URL + "?action=init";
-    const res = await fetch(url);
-    if (!res.ok) {
-      throw new Error("API request failed");
-    }
+      <button id="openProductBrowser" class="btn">Choose Product</button>
 
-    const data = await res.json();
-
-    state.products = (data.products || []).filter(p => isEnabled(p.status || p.active));
-    state.fonts = (data.fonts || []).filter(f => isEnabled(f.status || f.active));
-    state.categories = (data.categories || []).filter(c => isEnabled(c.status || c.active));
-    state.settings = data.settings || {};
-
-    console.log("products loaded:", state.products);
-    console.log("fonts loaded:", state.fonts);
-    console.log("categories loaded:", state.categories);
-    console.log("settings loaded:", state.settings);
-  }
-
-  /********************
-   * 渲染分类筛选
-   ********************/
-  function renderCategoryFilter() {
-   if (!dom.categoryFilter) {
-    console.error("categoryFilter element not found");
-    return;
-  }
-
-   dom.categoryFilter.innerHTML = "";
-
-   const allOption = document.createElement("option");
-   allOption.value = "";
-   allOption.textContent = "All Categories";
-   dom.categoryFilter.appendChild(allOption);
-
-   state.categories
-    .sort((a, b) => Number(a.sort || 999) - Number(b.sort || 999))
-    .forEach(category => {
-      const categoryName = category.category_name || category.name || category.category || "";
-      if (!categoryName) return;
-
-      const option = document.createElement("option");
-      option.value = categoryName;
-      option.textContent = categoryName;
-      dom.categoryFilter.appendChild(option);
-    });
-  }
-
-  /********************
-   * 渲染字体
-   ********************/
-async function renderFontOptions() {
-  if (!dom.fontSelect) {
-    console.error("fontSelect element not found");
-    return;
-  }
-
-  dom.fontSelect.innerHTML = "";
-
-  const fonts = (state.fonts || [])
-    .sort((a, b) => Number(a.sort || 999) - Number(b.sort || 999));
-
-  if (!fonts.length) {
-    console.error("No fonts found in state.fonts");
-    return;
-  }
-
-  for (const font of fonts) {
-    const fontName = getFontName(font);
-    const displayName = getFontDisplayName(font);
-    const fontUrl = getFontUrl(font);
-
-    if (fontUrl && fontName) {
-      injectFontFace(fontName, fontUrl);
-    }
-
-    if (!fontName) continue;
-
-    const option = document.createElement("option");
-    option.value = fontName;
-    option.textContent = displayName || fontName;
-    dom.fontSelect.appendChild(option);
-  }
-
-  if (fonts.length > 0) {
-    const firstFont = getFontName(fonts[0]);
-    if (firstFont) {
-      dom.fontSelect.value = firstFont;
-      updateFont(firstFont);
-    }
-  }
-
-  updateEngravingInfoBox();
-}
-
-  /********************
-   * 动态注入字体
-   ********************/
-  function injectFontFace(fontName, fontUrl) {
-    if (!fontName || !fontUrl) return;
-
-    const styleId = `font-face-${fontName.replace(/[^a-zA-Z0-9_-]/g, "_")}`;
-    if (document.getElementById(styleId)) return;
-
-    const style = document.createElement("style");
-    style.id = styleId;
-    style.innerHTML = `
-      @font-face {
-        font-family: '${fontName}';
-        src: url('${fontUrl}');
-      }
-    `;
-    document.head.appendChild(style);
-  }
-
-  /********************
-   * 渲染产品浏览器
-   ********************/
-function renderProductBrowser() {
-  if (!dom.productGrid) {
-    console.error("productGrid element not found");
-    return;
-  }
-
-  const keyword = dom.productSearchInput ? dom.productSearchInput.value.trim().toLowerCase() : "";
-  const category = dom.categoryFilter ? dom.categoryFilter.value : "";
-
-  const filtered = state.products
-    .filter(product => {
-      const sku = getProductKey(product).toLowerCase();
-      const nameCn = String(product.name_cn || "").toLowerCase();
-      const nameEn = String(product.name_en || product.name || "").toLowerCase();
-      const productCategory = getProductCategory(product);
-      const categoryMatch = !category || productCategory === category;
-      const keywordMatch =
-        !keyword ||
-        sku.includes(keyword) ||
-        nameCn.includes(keyword) ||
-        nameEn.includes(keyword);
-
-      return categoryMatch && keywordMatch;
-    })
-    .sort((a, b) => Number(a.sort || 999) - Number(b.sort || 999));
-
-  if (!filtered.length) {
-    dom.productGrid.innerHTML = '<div class="empty">No matching products found</div>';
-    return;
-  }
-
-  dom.productGrid.innerHTML = filtered.map(product => {
-    const sku = getProductKey(product);
-    const name = getProductName(product);
-    const categoryName = getProductCategory(product);
-    const img = getProductMainImage(product);
-    const isActive =
-      state.currentProduct &&
-      getProductKey(state.currentProduct) === sku;
-
-    return `
-      <div class="product-card ${isActive ? "active" : ""}" data-sku="${escapeHtml(sku)}">
-        <img src="${escapeHtml(img)}" alt="${escapeHtml(sku)}" onerror="this.src='';this.alt='Image failed to load';" />
-        <div class="sku">${escapeHtml(sku)}</div>
-        <div class="name">${escapeHtml(name)}</div>
-        <div class="category">${escapeHtml(categoryName)}</div>
+      <div class="current-product">
+        <img id="currentProductThumb" src="" alt="Product Image" />
+        <div class="sku" id="currentProductSku">No product selected</div>
+        <div class="name" id="currentProductName">Select the product via the buttons above.</div>
       </div>
-    `;
-  }).join("");
 
-  document.querySelectorAll(".product-card").forEach(card => {
-    card.addEventListener("click", () => {
-      const sku = card.dataset.sku;
-      selectProduct(sku);
-      closeProductBrowser();
-    });
-  });
-}
+      <div style="margin-top:16px;">
+        <div class="field">
+          <label>Current Category</label>
+          <input type="text" id="currentProductCategory" readonly />
+        </div>
 
-  /********************
-   * 选择产品
-   ********************/
-  function selectProduct(productKey) {
-    const product = state.products.find(p => getProductKey(p) === productKey);
-    if (!product) return;
+        <div class="field">
+          <label>Max Characters</label>
+          <input type="number" id="maxCharsDisplay" readonly />
+        </div>
+      </div>
+    </div>
 
-    state.currentProduct = product;
+    <!-- 中间 -->
+    <div class="panel preview-panel">
+      <h2>Preview Area</h2>
 
-    updateCurrentProductInfo(product);
-    loadProductPreview(product);
-    applyProductDefaults(product);
-    renderProductBrowser();
-  }
+      <div id="previewWrapper" class="preview-wrapper">
+        <img id="productBaseImage" src="" alt="Carved surface rendering" />
+        <div id="textLayer">Your Text</div>
+      </div>
 
-  /********************
-   * 更新左侧产品信息
-   ********************/
-  function updateCurrentProductInfo(product) {
-    dom.currentProductThumb.src = getProductMainImage(product);
-    dom.currentProductSku.textContent = getProductKey(product);
-    dom.currentProductName.textContent = getProductName(product);
-    dom.currentProductCategory.value = getProductCategory(product);
-    dom.maxCharsDisplay.value = product.max_chars || "";
+      <div class="preview-actions">
+        <button id="downloadBtn" class="btn">Download Preview</button>
+        <button id="resetTextPositionBtn" class="btn btn-secondary">Reset Text Position</button>
+      </div>
+    </div>
 
-    updateEngravingInfoBox();
-  }
+    <!-- 右侧 -->
+    <div class="panel">
+      <h2>Text Settings</h2>
 
-  /********************
-   * 加载预览图
-   ********************/
-  function loadProductPreview(product) {
-    const imgSrc = getProductPreviewImage(product);
-    dom.productBaseImage.src = imgSrc;
+      <div class="field">
+        <label>Enter Text</label>
+        <textarea id="userText" rows="3" placeholder="Enter text"></textarea>
+        <div class="hint">Text will be automatically truncated if it exceeds the maximum character limit.</div>
+      </div>
 
-    dom.productBaseImage.onload = () => {
-      updateEngravingInfoBox();
+      <div class="field">
+        <label>Font(Tip: Use the Up and Down arrow keys on your keyboard to preview font styles in real time)</label>
+        <select id="fontSelect"></select>
+      </div>
+
+      <div class="field">
+        <label>Font Size</label>
+        <div class="row-inline">
+          <input type="range" id="fontSizeRange" min="10" max="80" value="28" />
+          <input type="number" id="fontSizeInput" min="10" max="80" value="28" />
+        </div>
+      </div>
+
+      <div class="field">
+        <label>Rotation Angle</label>
+        <div class="row-inline">
+          <input type="range" id="rotationRange" min="-180" max="180" value="0" />
+          <input type="number" id="rotationInput" min="-180" max="180" value="0" />
+        </div>
+      </div>
+
+      <div class="field">
+        <button id="resetRotation" class="btn btn-secondary">Reset Rotation</button>
+      </div>
+
+      <div class="field">
+        <label>Text Color</label>
+        <input type="color" id="textColor" value="#111111" />
+      </div>
+
+      <div class="hint">
+        Effect display: Engraved area in black.<br />
+        You can drag the text position. Rotation is supported from -180° to 180°.
+      </div>
+    </div>
+  </div>
+
+  <!-- 产品浏览器 -->
+  <div class="modal" id="productBrowserModal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3>Product Browser</h3>
+        <button id="closeProductBrowser" class="btn btn-secondary">Close</button>
+      </div>
+
+      <div class="modal-body">
+        <div class="browser-toolbar">
+          <input type="text" id="productSearchInput" placeholder="Search SKU / Product Name" />
+          <select id="categoryFilter"></select>
+          <button id="clearSearchBtn" class="btn btn-secondary">Clear Filters</button>
+        </div>
+
+        <div id="productGrid" class="product-grid"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- html2canvas 导出预览 -->
+  <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+
+  <script>
+    /********************
+     * 1. 这里改成你的 Google Apps Script Web App 地址
+     ********************/
+    const API_BASE_URL = "https://script.google.com/macros/s/AKfycbyy8GsTmHeYdgrmFi2wkN5pua7gilVpg-8v44jNucrHkN3XzW0jtcJWYD_JsZnbhiUWrQ/exec";
+
+    /********************
+     * 全局状态
+     ********************/
+    const state = {
+      products: [],
+      fonts: [],
+      categories: [],
+      settings: {},
+      currentProduct: null,
+      currentRotation: 0,
+      currentFontSize: 28,
+      drag: {
+        active: false,
+        offsetX: 0,
+        offsetY: 0
+      }
     };
 
-    dom.productBaseImage.onerror = () => {
-      console.error("Image failed to load:", imgSrc);
+    /********************
+     * DOM
+     ********************/
+    const dom = {
+      openProductBrowser: document.getElementById("openProductBrowser"),
+      closeProductBrowser: document.getElementById("closeProductBrowser"),
+      productBrowserModal: document.getElementById("productBrowserModal"),
+      productGrid: document.getElementById("productGrid"),
+      productSearchInput: document.getElementById("productSearchInput"),
+      categoryFilter: document.getElementById("categoryFilter"),
+      clearSearchBtn: document.getElementById("clearSearchBtn"),
+
+      currentProductThumb: document.getElementById("currentProductThumb"),
+      currentProductSku: document.getElementById("currentProductSku"),
+      currentProductName: document.getElementById("currentProductName"),
+      currentProductCategory: document.getElementById("currentProductCategory"),
+      maxCharsDisplay: document.getElementById("maxCharsDisplay"),
+
+      productBaseImage: document.getElementById("productBaseImage"),
+      textLayer: document.getElementById("textLayer"),
+      previewWrapper: document.getElementById("previewWrapper"),
+
+      userText: document.getElementById("userText"),
+      fontSelect: document.getElementById("fontSelect"),
+      fontSizeRange: document.getElementById("fontSizeRange"),
+      fontSizeInput: document.getElementById("fontSizeInput"),
+      rotationRange: document.getElementById("rotationRange"),
+      rotationInput: document.getElementById("rotationInput"),
+      resetRotation: document.getElementById("resetRotation"),
+      textColor: document.getElementById("textColor"),
+      downloadBtn: document.getElementById("downloadBtn"),
+      resetTextPositionBtn: document.getElementById("resetTextPositionBtn")
     };
-  }
 
-  /********************
-   * 应用产品默认参数
-   ********************/
-  function applyProductDefaults(product) {
-    const previewRect = dom.previewWrapper.getBoundingClientRect();
+    /********************
+     * 初始化
+     ********************/
+    async function initApp() {
+      try {
+        await loadAllData();
+        renderCategoryFilter();
+        renderFontOptions();
+        renderProductBrowser();
+        bindEvents();
 
-    const defaultX = Number(product.text_x || previewRect.width / 2);
-    const defaultY = Number(product.text_y || previewRect.height / 2);
-    const defaultFontSize = Number(product.default_font_size || state.settings.default_font_size || 28);
-    const minFontSize = Number(product.min_font_size || 10);
-    const maxFontSize = Number(product.max_font_size || 80);
-    const defaultRotation = Number(product.default_rotation || 0);
-    const defaultText = state.settings.default_text || "Your Text";
-
-    state.currentFontSize = defaultFontSize;
-    state.currentRotation = defaultRotation;
-
-    dom.fontSizeRange.min = minFontSize;
-    dom.fontSizeRange.max = maxFontSize;
-    dom.fontSizeInput.min = minFontSize;
-    dom.fontSizeInput.max = maxFontSize;
-
-    dom.fontSizeRange.value = defaultFontSize;
-    dom.fontSizeInput.value = defaultFontSize;
-
-    dom.rotationRange.value = defaultRotation;
-    dom.rotationInput.value = defaultRotation;
-
-    if (!dom.userText.value.trim()) {
-      dom.userText.value = defaultText;
+        if (state.products.length > 0) {
+          selectProduct(state.products[0].sku);
+        }
+      } catch (error) {
+        console.error("初始化失败:", error);
+        alert("初始化失败，请检查 Google Apps Script 接口地址和表格数据。");
+      }
     }
 
-    updatePreviewText(dom.userText.value);
-    updateFontSize(defaultFontSize);
-    updateRotation(defaultRotation);
+    /********************
+     * 数据加载
+     * 假设 GAS 返回格式：
+     * {
+     *   products: [...],
+     *   fonts: [...],
+     *   categories: [...],
+     *   settings: {...}
+     * }
+     ********************/
+    async function loadAllData() {
+      const url = API_BASE_URL + "?action=init";
+      const res = await fetch(url);
+      if (!res.ok) {
+        throw new Error("接口请求失败");
+      }
+      const data = await res.json();
 
-    dom.textLayer.style.left = defaultX + "px";
-    dom.textLayer.style.top = defaultY + "px";
-    dom.textLayer.dataset.baseX = defaultX;
-    dom.textLayer.dataset.baseY = defaultY;
-
-    const alignValue = String(product.text_align || "").toLowerCase();
-    if (alignValue === "left") {
-      dom.textLayer.style.textAlign = "left";
-    } else if (alignValue === "right") {
-      dom.textLayer.style.textAlign = "right";
-    } else {
-      dom.textLayer.style.textAlign = "center";
+      state.products = (data.products || []).filter(p => (p.status || "").toLowerCase() === "active");
+      state.fonts = (data.fonts || []).filter(f => (f.status || "").toLowerCase() === "active");
+      state.categories = (data.categories || []).filter(c => (c.status || "").toLowerCase() === "active");
+      state.settings = data.settings || {};
     }
 
-    updateEngravingInfoBox();
-  }
+    /********************
+     * 渲染分类筛选
+     ********************/
+    function renderCategoryFilter() {
+      dom.categoryFilter.innerHTML = "";
 
-  /********************
-   * 更新文字内容
-   ********************/
-  function updatePreviewText(text) {
-    const maxChars = Number(state.currentProduct?.max_chars || 999);
-    const finalText = (text || "").slice(0, maxChars);
+      const allOption = document.createElement("option");
+      allOption.value = "";
+      allOption.textContent = "All Categories";
+      dom.categoryFilter.appendChild(allOption);
 
-    dom.userText.value = finalText;
-    dom.textLayer.textContent = finalText || (state.settings.default_text || "Your Text");
+      state.categories
+        .sort((a, b) => Number(a.sort || 999) - Number(b.sort || 999))
+        .forEach(category => {
+          const option = document.createElement("option");
+          option.value = category.category_name;
+          option.textContent = category.category_name;
+          dom.categoryFilter.appendChild(option);
+        });
+    }
 
-    updateEngravingInfoBox();
-  }
+    /********************
+     * 渲染字体
+     ********************/
+    async function renderFontOptions() {
+      dom.fontSelect.innerHTML = "";
 
-  /********************
-   * 更新字体
-   ********************/
-  function updateFont(fontName) {
-    dom.textLayer.style.fontFamily = `'${fontName}', Arial, sans-serif`;
-    updateEngravingInfoBox();
-  }
+      for (const font of state.fonts.sort((a, b) => Number(a.sort || 999) - Number(b.sort || 999))) {
+        if (font.font_url && font.font_name) {
+          injectFontFace(font.font_name, font.font_url);
+        }
 
-  /********************
-   * 更新字号
-   ********************/
-  function updateFontSize(size) {
-    const fontSize = Number(size || 28);
-    state.currentFontSize = fontSize;
-    dom.textLayer.style.fontSize = fontSize + "px";
-    dom.fontSizeRange.value = fontSize;
-    dom.fontSizeInput.value = fontSize;
+        const option = document.createElement("option");
+        option.value = font.font_name;
+        option.textContent = font.display_name || font.font_name;
+        dom.fontSelect.appendChild(option);
+      }
 
-    updateEngravingInfoBox();
-  }
+      if (state.fonts.length > 0) {
+        dom.fontSelect.value = state.fonts[0].font_name;
+        updateFont(state.fonts[0].font_name);
+      }
+    }
 
-  /********************
-   * 更新旋转
-   ********************/
-  function updateRotation(angle) {
-    const value = Number(angle || 0);
-    state.currentRotation = value;
-    dom.rotationRange.value = value;
-    dom.rotationInput.value = value;
-    applyTextTransform();
+    /********************
+     * 动态注入字体
+     ********************/
+    function injectFontFace(fontName, fontUrl) {
+      const style = document.createElement("style");
+      style.innerHTML = `
+        @font-face {
+          font-family: '${fontName}';
+          src: url('${fontUrl}');
+        }
+      `;
+      document.head.appendChild(style);
+    }
 
-    updateEngravingInfoBox();
-  }
+    /********************
+     * 渲染产品浏览器
+     ********************/
+    function renderProductBrowser() {
+      const keyword = dom.productSearchInput.value.trim().toLowerCase();
+      const category = dom.categoryFilter.value;
 
-  function applyTextTransform() {
-    dom.textLayer.style.transform = `translate(-50%, -50%) rotate(${state.currentRotation}deg)`;
-  }
+      const filtered = state.products
+        .filter(product => {
+          const sku = (product.sku || "").toLowerCase();
+          const nameCn = (product.name_cn || "").toLowerCase();
+          const nameEn = (product.name_en || "").toLowerCase();
+          const categoryMatch = !category || product.category === category;
+          const keywordMatch = !keyword || sku.includes(keyword) || nameCn.includes(keyword) || nameEn.includes(keyword);
+          return categoryMatch && keywordMatch;
+        })
+        .sort((a, b) => Number(a.sort || 999) - Number(b.sort || 999));
 
-  /********************
-   * 重置文字位置
-   ********************/
-  function resetTextPosition() {
-    if (!state.currentProduct) return;
+      if (!filtered.length) {
+        dom.productGrid.innerHTML = '<div class="empty">没有找到匹配的产品</div>';
+        return;
+      }
 
-    const x = Number(state.currentProduct.text_x || dom.previewWrapper.clientWidth / 2);
-    const y = Number(state.currentProduct.text_y || dom.previewWrapper.clientHeight / 2);
+      dom.productGrid.innerHTML = filtered.map(product => `
+        <div class="product-card ${state.currentProduct && state.currentProduct.sku === product.sku ? "active" : ""}" data-sku="${escapeHtml(product.sku || "")}">
+          <img src="${escapeHtml(product.main_image || product.thumb_image || "")}" alt="${escapeHtml(product.sku || "")}" onerror="this.src='';this.alt='图片加载失败';" />
+          <div class="sku">${escapeHtml(product.sku || "")}</div>
+          <div class="name">${escapeHtml(product.name_cn || product.name_en || "")}</div>
+          <div class="category">${escapeHtml(product.category || "")}</div>
+        </div>
+      `).join("");
 
-    dom.textLayer.style.left = x + "px";
-    dom.textLayer.style.top = y + "px";
-
-    updateEngravingInfoBox();
-  }
-
-  /********************
-   * 打开/关闭产品浏览器
-   ********************/
-  function openProductBrowser() {
-    dom.productBrowserModal.classList.add("show");
-  }
-
-  function closeProductBrowser() {
-    dom.productBrowserModal.classList.remove("show");
-  }
-
-  /********************
-   * 获取文字层坐标
-   ********************/
-  function getTextLayerPosition() {
-    const wrapperRect = dom.previewWrapper.getBoundingClientRect();
-    const textRect = dom.textLayer.getBoundingClientRect();
-
-    const x = Math.round(textRect.left - wrapperRect.left);
-    const y = Math.round(textRect.top - wrapperRect.top);
-    const centerX = Math.round((textRect.left + textRect.width / 2) - wrapperRect.left);
-    const centerY = Math.round((textRect.top + textRect.height / 2) - wrapperRect.top);
-
-    return { x, y, centerX, centerY };
-  }
-
-  /********************
-   * 信息框数据
-   ********************/
-  function getEngravingData() {
-    const pos = getTextLayerPosition();
-
-    return {
-      productCode: getProductKey(state.currentProduct),
-      productName: getProductName(state.currentProduct),
-      category: getProductCategory(state.currentProduct),
-      text: dom.userText?.value || dom.textLayer.textContent || "",
-      fontName: dom.fontSelect?.value || "",
-      fontSize: dom.fontSizeInput?.value || state.currentFontSize || "",
-      rotation: state.currentRotation || 0,
-      color: dom.textColor?.value || "#000000",
-      x: pos.x,
-      y: pos.y,
-      centerX: pos.centerX,
-      centerY: pos.centerY
-    };
-  }
-
-  function buildEngravingInfoText() {
-    const data = getEngravingData();
-
-    return [
-      `Product: ${data.productCode}`,
-      `Name: ${data.productName}`,
-      `Text: ${data.text.replace(/\n/g, " / ")}`,
-      `Font: ${data.fontName}`,
-      `Size: ${data.fontSize}`,
-      `Rotation: ${data.rotation}°`,
-      `X: ${data.x}`,
-      `Y: ${data.y}`,
-      `Center: (${data.centerX}, ${data.centerY})`,
-      `Color: ${data.color}`
-    ].join("\n");
-  }
-
-  function updateEngravingInfoBox() {
-    if (!dom.engravingInfoBox) return;
-    dom.engravingInfoBox.textContent = buildEngravingInfoText();
-  }
-
-  /********************
-   * 导出预览图
-   ********************/
-  async function downloadPreview() {
-    try {
-      updateEngravingInfoBox();
-
-      const canvas = await html2canvas(dom.previewWrapper, {
-        backgroundColor: null,
-        scale: Number(state.settings.export_scale || 2),
-        useCORS: true
+      document.querySelectorAll(".product-card").forEach(card => {
+        card.addEventListener("click", () => {
+          const sku = card.dataset.sku;
+          selectProduct(sku);
+          closeProductBrowser();
+        });
       });
-
-      const link = document.createElement("a");
-      const sku = getProductKey(state.currentProduct) || "preview";
-      const now = new Date();
-      const timeStr = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, "0")}${String(now.getDate()).padStart(2, "0")}_${String(now.getHours()).padStart(2, "0")}${String(now.getMinutes()).padStart(2, "0")}${String(now.getSeconds()).padStart(2, "0")}`;
-
-      link.download = `${sku}_${timeStr}.png`;
-      link.href = canvas.toDataURL("image/png");
-      link.click();
-    } catch (err) {
-      console.error("Export failed:", err);
-      alert("Export failed. Please check whether the image allows cross-origin access.");
     }
-  }
 
-  /********************
-   * 拖拽文字
-   ********************/
-  function enableTextDragging() {
-    const textLayer = dom.textLayer;
-    const wrapper = dom.previewWrapper;
+    /********************
+     * 选择产品
+     ********************/
+    function selectProduct(sku) {
+      const product = state.products.find(p => p.sku === sku);
+      if (!product) return;
 
-    textLayer.addEventListener("mousedown", (e) => {
-      state.drag.active = true;
+      state.currentProduct = product;
 
-      const textRect = textLayer.getBoundingClientRect();
-      state.drag.offsetX = e.clientX - textRect.left;
-      state.drag.offsetY = e.clientY - textRect.top;
+      updateCurrentProductInfo(product);
+      loadProductPreview(product);
+      applyProductDefaults(product);
+      renderProductBrowser();
+    }
 
-      document.body.style.userSelect = "none";
-    });
+    /********************
+     * 更新左侧产品信息
+     ********************/
+    function updateCurrentProductInfo(product) {
+      dom.currentProductThumb.src = product.main_image || product.thumb_image || product.preview_image || "";
+      dom.currentProductSku.textContent = product.sku || "";
+      dom.currentProductName.textContent = product.name_cn || product.name_en || "";
+      dom.currentProductCategory.value = product.category || "";
+      dom.maxCharsDisplay.value = product.max_chars || "";
+    }
 
-    document.addEventListener("mousemove", (e) => {
-      if (!state.drag.active) return;
+    /********************
+     * 加载预览图
+     ********************/
+    function loadProductPreview(product) {
+      dom.productBaseImage.src = product.preview_image || product.main_image || "";
+    }
 
-      const wrapperRect = wrapper.getBoundingClientRect();
-      const x = e.clientX - wrapperRect.left - state.drag.offsetX + textLayer.offsetWidth / 2;
-      const y = e.clientY - wrapperRect.top - state.drag.offsetY + textLayer.offsetHeight / 2;
+    /********************
+     * 应用产品默认参数
+     ********************/
+    function applyProductDefaults(product) {
+      const previewRect = dom.previewWrapper.getBoundingClientRect();
+
+      const defaultX = Number(product.text_x || previewRect.width / 2);
+      const defaultY = Number(product.text_y || previewRect.height / 2);
+      const defaultFontSize = Number(product.default_font_size || state.settings.default_font_size || 28);
+      const minFontSize = Number(product.min_font_size || 10);
+      const maxFontSize = Number(product.max_font_size || 80);
+      const defaultRotation = Number(product.default_rotation || 0);
+      const defaultText = state.settings.default_text || "Your Text";
+
+      state.currentFontSize = defaultFontSize;
+      state.currentRotation = defaultRotation;
+
+      dom.fontSizeRange.min = minFontSize;
+      dom.fontSizeRange.max = maxFontSize;
+      dom.fontSizeInput.min = minFontSize;
+      dom.fontSizeInput.max = maxFontSize;
+
+      dom.fontSizeRange.value = defaultFontSize;
+      dom.fontSizeInput.value = defaultFontSize;
+
+      dom.rotationRange.value = defaultRotation;
+      dom.rotationInput.value = defaultRotation;
+
+      if (!dom.userText.value.trim()) {
+        dom.userText.value = defaultText;
+      }
+
+      updatePreviewText(dom.userText.value);
+      updateFontSize(defaultFontSize);
+      updateRotation(defaultRotation);
+
+      dom.textLayer.style.left = defaultX + "px";
+      dom.textLayer.style.top = defaultY + "px";
+      dom.textLayer.dataset.baseX = defaultX;
+      dom.textLayer.dataset.baseY = defaultY;
+
+      if ((product.text_align || "").toLowerCase() === "left") {
+        dom.textLayer.style.textAlign = "left";
+      } else if ((product.text_align || "").toLowerCase() === "right") {
+        dom.textLayer.style.textAlign = "right";
+      } else {
+        dom.textLayer.style.textAlign = "center";
+      }
+    }
+
+    /********************
+     * 更新文字内容
+     ********************/
+    function updatePreviewText(text) {
+      const maxChars = Number(state.currentProduct?.max_chars || 999);
+      const finalText = (text || "").slice(0, maxChars);
+      dom.userText.value = finalText;
+      dom.textLayer.textContent = finalText || (state.settings.default_text || "Your Text");
+    }
+
+    /********************
+     * 更新字体
+     ********************/
+    function updateFont(fontName) {
+      dom.textLayer.style.fontFamily = fontName || "Arial";
+    }
+
+    /********************
+     * 更新字号
+     ********************/
+    function updateFontSize(size) {
+      const fontSize = Number(size || 28);
+      state.currentFontSize = fontSize;
+      dom.textLayer.style.fontSize = fontSize + "px";
+      dom.fontSizeRange.value = fontSize;
+      dom.fontSizeInput.value = fontSize;
+    }
+
+    /********************
+     * 更新旋转
+     ********************/
+    function updateRotation(angle) {
+      const value = Number(angle || 0);
+      state.currentRotation = value;
+      dom.rotationRange.value = value;
+      dom.rotationInput.value = value;
+      applyTextTransform();
+    }
+
+    function applyTextTransform() {
+      dom.textLayer.style.transform = `translate(-50%, -50%) rotate(${state.currentRotation}deg)`;
+    }
+
+    /********************
+     * 重置文字位置
+     ********************/
+    function resetTextPosition() {
+      if (!state.currentProduct) return;
+
+      const x = Number(state.currentProduct.text_x || dom.previewWrapper.clientWidth / 2);
+      const y = Number(state.currentProduct.text_y || dom.previewWrapper.clientHeight / 2);
 
       dom.textLayer.style.left = x + "px";
       dom.textLayer.style.top = y + "px";
+    }
 
-      updateEngravingInfoBox();
-    });
+    /********************
+     * 打开/关闭产品浏览器
+     ********************/
+    function openProductBrowser() {
+      dom.productBrowserModal.classList.add("show");
+    }
 
-    document.addEventListener("mouseup", () => {
-      state.drag.active = false;
-      document.body.style.userSelect = "";
-      updateEngravingInfoBox();
-    });
+    function closeProductBrowser() {
+      dom.productBrowserModal.classList.remove("show");
+    }
+
+    /********************
+     * 导出预览图
+     ********************/
+    async function downloadPreview() {
+      try {
+        const canvas = await html2canvas(dom.previewWrapper, {
+          backgroundColor: null,
+          scale: Number(state.settings.export_scale || 2),
+          useCORS: true
+        });
+
+        const link = document.createElement("a");
+        const sku = state.currentProduct?.sku || "preview";
+        const now = new Date();
+        const timeStr = `${now.getHours()}${now.getMinutes()}${now.getSeconds()}`;
+        link.download = `${sku}_${timeStr}.png`;
+        link.href = canvas.toDataURL("image/png");
+        link.click();
+      } catch (err) {
+        console.error("导出失败:", err);
+        alert("导出失败，请检查图片是否允许跨域访问。");
+      }
+    }
+
+    /********************
+     * 拖拽文字
+     ********************/
+    function enableTextDragging() {
+      const textLayer = dom.textLayer;
+      const wrapper = dom.previewWrapper;
+
+      textLayer.addEventListener("mousedown", (e) => {
+        state.drag.active = true;
+
+        const textRect = textLayer.getBoundingClientRect();
+        state.drag.offsetX = e.clientX - textRect.left;
+        state.drag.offsetY = e.clientY - textRect.top;
+
+        document.body.style.userSelect = "none";
+      });
+
+      document.addEventListener("mousemove", (e) => {
+        if (!state.drag.active) return;
+
+        const wrapperRect = wrapper.getBoundingClientRect();
+        const x = e.clientX - wrapperRect.left - state.drag.offsetX + textLayer.offsetWidth / 2;
+        const y = e.clientY - wrapperRect.top - state.drag.offsetY + textLayer.offsetHeight / 2;
+
+        dom.textLayer.style.left = x + "px";
+        dom.textLayer.style.top = y + "px";
+      });
+
+      document.addEventListener("mouseup", () => {
+        state.drag.active = false;
+        document.body.style.userSelect = "";
+      });
+    }
+
+    /********************
+     * 绑定事件
+     ********************/
+    function bindEvents() {
+      dom.openProductBrowser.addEventListener("click", openProductBrowser);
+      dom.closeProductBrowser.addEventListener("click", closeProductBrowser);
+
+      dom.productBrowserModal.addEventListener("click", (e) => {
+        if (e.target === dom.productBrowserModal) {
+          closeProductBrowser();
+        }
+      });
+
+dom.fontSelect.addEventListener("keydown", (e) => {
+  if (e.key === "ArrowUp" || e.key === "ArrowDown") {
+    setTimeout(() => {
+      updateFont(dom.fontSelect.value);
+    }, 0);
   }
+});
 
-  /********************
-   * 绑定事件
-   ********************/
-  function bindEvents() {
-    dom.openProductBrowser.addEventListener("click", openProductBrowser);
-    dom.closeProductBrowser.addEventListener("click", closeProductBrowser);
+dom.fontSelect.addEventListener("keyup", (e) => {
+  if (e.key === "ArrowUp" || e.key === "ArrowDown") {
+    updateFont(e.target.value);
+  }
+});
 
-    dom.productBrowserModal.addEventListener("click", (e) => {
-      if (e.target === dom.productBrowserModal) {
-        closeProductBrowser();
-      }
-    });
+      dom.productSearchInput.addEventListener("input", renderProductBrowser);
+      dom.categoryFilter.addEventListener("change", renderProductBrowser);
 
-    dom.fontSelect.addEventListener("keydown", (e) => {
-      if (e.key === "ArrowUp" || e.key === "ArrowDown") {
-        setTimeout(() => {
-          updateFont(dom.fontSelect.value);
-        }, 0);
-      }
-    });
+      dom.clearSearchBtn.addEventListener("click", () => {
+        dom.productSearchInput.value = "";
+        dom.categoryFilter.value = "";
+        renderProductBrowser();
+      });
 
-    dom.fontSelect.addEventListener("keyup", (e) => {
-      if (e.key === "ArrowUp" || e.key === "ArrowDown") {
+      dom.userText.addEventListener("input", (e) => {
+        updatePreviewText(e.target.value);
+      });
+
+      dom.fontSelect.addEventListener("change", (e) => {
         updateFont(e.target.value);
-      }
-    });
+      });
 
-    dom.productSearchInput.addEventListener("input", renderProductBrowser);
-    dom.categoryFilter.addEventListener("change", renderProductBrowser);
+      dom.fontSizeRange.addEventListener("input", (e) => {
+        updateFontSize(e.target.value);
+      });
 
-    dom.clearSearchBtn.addEventListener("click", () => {
-      dom.productSearchInput.value = "";
-      dom.categoryFilter.value = "";
-      renderProductBrowser();
-    });
+      dom.fontSizeInput.addEventListener("input", (e) => {
+        updateFontSize(e.target.value);
+      });
 
-    dom.userText.addEventListener("input", (e) => {
-      updatePreviewText(e.target.value);
-    });
+      dom.rotationRange.addEventListener("input", (e) => {
+        updateRotation(e.target.value);
+      });
 
-    dom.fontSelect.addEventListener("change", (e) => {
-      updateFont(e.target.value);
-    });
+      dom.rotationInput.addEventListener("input", (e) => {
+        updateRotation(e.target.value);
+      });
 
-    dom.fontSizeRange.addEventListener("input", (e) => {
-      updateFontSize(e.target.value);
-    });
+      dom.resetRotation.addEventListener("click", () => {
+        updateRotation(0);
+      });
 
-    dom.fontSizeInput.addEventListener("input", (e) => {
-      updateFontSize(e.target.value);
-    });
+      dom.textColor.addEventListener("input", (e) => {
+        dom.textLayer.style.color = e.target.value;
+      });
 
-    dom.rotationRange.addEventListener("input", (e) => {
-      updateRotation(e.target.value);
-    });
+      dom.downloadBtn.addEventListener("click", downloadPreview);
+      dom.resetTextPositionBtn.addEventListener("click", resetTextPosition);
 
-    dom.rotationInput.addEventListener("input", (e) => {
-      updateRotation(e.target.value);
-    });
+      enableTextDragging();
+    }
 
-    dom.resetRotation.addEventListener("click", () => {
-      updateRotation(0);
-    });
+    /********************
+     * 工具函数
+     ********************/
+    function escapeHtml(str) {
+      return String(str)
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#039;");
+    }
 
-    dom.textColor.addEventListener("input", (e) => {
-      dom.textLayer.style.color = e.target.value;
-      updateEngravingInfoBox();
-    });
-
-    dom.downloadBtn.addEventListener("click", downloadPreview);
-    dom.resetTextPositionBtn.addEventListener("click", resetTextPosition);
-
-    enableTextDragging();
-  }
-
-  /********************
-   * 启动
-   ********************/
-  initApp();
-</script>
+    /********************
+     * 启动
+     ********************/
+    initApp();
+  </script>
+</body>
+</html>
