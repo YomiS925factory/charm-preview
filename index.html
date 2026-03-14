@@ -174,67 +174,77 @@
    * 渲染分类筛选
    ********************/
   function renderCategoryFilter() {
-    dom.categoryFilter.innerHTML = "";
+   if (!dom.categoryFilter) {
+    console.error("categoryFilter element not found");
+    return;
+  }
 
-    const allOption = document.createElement("option");
-    allOption.value = "";
-    allOption.textContent = "All Categories";
-    dom.categoryFilter.appendChild(allOption);
+   dom.categoryFilter.innerHTML = "";
 
-    state.categories
-      .sort((a, b) => Number(a.sort || 999) - Number(b.sort || 999))
-      .forEach(category => {
-        const categoryName = category.category_name || category.name || category.category || "";
-        if (!categoryName) return;
+   const allOption = document.createElement("option");
+   allOption.value = "";
+   allOption.textContent = "All Categories";
+   dom.categoryFilter.appendChild(allOption);
 
-        const option = document.createElement("option");
-        option.value = categoryName;
-        option.textContent = categoryName;
-        dom.categoryFilter.appendChild(option);
-      });
+   state.categories
+    .sort((a, b) => Number(a.sort || 999) - Number(b.sort || 999))
+    .forEach(category => {
+      const categoryName = category.category_name || category.name || category.category || "";
+      if (!categoryName) return;
+
+      const option = document.createElement("option");
+      option.value = categoryName;
+      option.textContent = categoryName;
+      dom.categoryFilter.appendChild(option);
+    });
   }
 
   /********************
    * 渲染字体
    ********************/
-  async function renderFontOptions() {
-    dom.fontSelect.innerHTML = "";
-
-    const fonts = (state.fonts || [])
-      .sort((a, b) => Number(a.sort || 999) - Number(b.sort || 999));
-
-    if (!fonts.length) {
-      console.error("No fonts found in state.fonts");
-      return;
-    }
-
-    for (const font of fonts) {
-      const fontName = getFontName(font);
-      const displayName = getFontDisplayName(font);
-      const fontUrl = getFontUrl(font);
-
-      if (fontUrl && fontName) {
-        injectFontFace(fontName, fontUrl);
-      }
-
-      if (!fontName) continue;
-
-      const option = document.createElement("option");
-      option.value = fontName;
-      option.textContent = displayName || fontName;
-      dom.fontSelect.appendChild(option);
-    }
-
-    if (fonts.length > 0) {
-      const firstFont = getFontName(fonts[0]);
-      if (firstFont) {
-        dom.fontSelect.value = firstFont;
-        updateFont(firstFont);
-      }
-    }
-
-    updateEngravingInfoBox();
+async function renderFontOptions() {
+  if (!dom.fontSelect) {
+    console.error("fontSelect element not found");
+    return;
   }
+
+  dom.fontSelect.innerHTML = "";
+
+  const fonts = (state.fonts || [])
+    .sort((a, b) => Number(a.sort || 999) - Number(b.sort || 999));
+
+  if (!fonts.length) {
+    console.error("No fonts found in state.fonts");
+    return;
+  }
+
+  for (const font of fonts) {
+    const fontName = getFontName(font);
+    const displayName = getFontDisplayName(font);
+    const fontUrl = getFontUrl(font);
+
+    if (fontUrl && fontName) {
+      injectFontFace(fontName, fontUrl);
+    }
+
+    if (!fontName) continue;
+
+    const option = document.createElement("option");
+    option.value = fontName;
+    option.textContent = displayName || fontName;
+    dom.fontSelect.appendChild(option);
+  }
+
+  if (fonts.length > 0) {
+    const firstFont = getFontName(fonts[0]);
+    if (firstFont) {
+      dom.fontSelect.value = firstFont;
+      updateFont(firstFont);
+    }
+  }
+
+  updateEngravingInfoBox();
+}
 
   /********************
    * 动态注入字体
@@ -259,59 +269,64 @@
   /********************
    * 渲染产品浏览器
    ********************/
-  function renderProductBrowser() {
-    const keyword = dom.productSearchInput.value.trim().toLowerCase();
-    const category = dom.categoryFilter.value;
-
-    const filtered = state.products
-      .filter(product => {
-        const sku = getProductKey(product).toLowerCase();
-        const nameCn = String(product.name_cn || "").toLowerCase();
-        const nameEn = String(product.name_en || product.name || "").toLowerCase();
-        const productCategory = getProductCategory(product);
-        const categoryMatch = !category || productCategory === category;
-        const keywordMatch =
-          !keyword ||
-          sku.includes(keyword) ||
-          nameCn.includes(keyword) ||
-          nameEn.includes(keyword);
-
-        return categoryMatch && keywordMatch;
-      })
-      .sort((a, b) => Number(a.sort || 999) - Number(b.sort || 999));
-
-    if (!filtered.length) {
-      dom.productGrid.innerHTML = '<div class="empty">No matching products found</div>';
-      return;
-    }
-
-    dom.productGrid.innerHTML = filtered.map(product => {
-      const sku = getProductKey(product);
-      const name = getProductName(product);
-      const categoryName = getProductCategory(product);
-      const img = getProductMainImage(product);
-      const isActive =
-        state.currentProduct &&
-        getProductKey(state.currentProduct) === sku;
-
-      return `
-        <div class="product-card ${isActive ? "active" : ""}" data-sku="${escapeHtml(sku)}">
-          <img src="${escapeHtml(img)}" alt="${escapeHtml(sku)}" onerror="this.src='';this.alt='Image failed to load';" />
-          <div class="sku">${escapeHtml(sku)}</div>
-          <div class="name">${escapeHtml(name)}</div>
-          <div class="category">${escapeHtml(categoryName)}</div>
-        </div>
-      `;
-    }).join("");
-
-    document.querySelectorAll(".product-card").forEach(card => {
-      card.addEventListener("click", () => {
-        const sku = card.dataset.sku;
-        selectProduct(sku);
-        closeProductBrowser();
-      });
-    });
+function renderProductBrowser() {
+  if (!dom.productGrid) {
+    console.error("productGrid element not found");
+    return;
   }
+
+  const keyword = dom.productSearchInput ? dom.productSearchInput.value.trim().toLowerCase() : "";
+  const category = dom.categoryFilter ? dom.categoryFilter.value : "";
+
+  const filtered = state.products
+    .filter(product => {
+      const sku = getProductKey(product).toLowerCase();
+      const nameCn = String(product.name_cn || "").toLowerCase();
+      const nameEn = String(product.name_en || product.name || "").toLowerCase();
+      const productCategory = getProductCategory(product);
+      const categoryMatch = !category || productCategory === category;
+      const keywordMatch =
+        !keyword ||
+        sku.includes(keyword) ||
+        nameCn.includes(keyword) ||
+        nameEn.includes(keyword);
+
+      return categoryMatch && keywordMatch;
+    })
+    .sort((a, b) => Number(a.sort || 999) - Number(b.sort || 999));
+
+  if (!filtered.length) {
+    dom.productGrid.innerHTML = '<div class="empty">No matching products found</div>';
+    return;
+  }
+
+  dom.productGrid.innerHTML = filtered.map(product => {
+    const sku = getProductKey(product);
+    const name = getProductName(product);
+    const categoryName = getProductCategory(product);
+    const img = getProductMainImage(product);
+    const isActive =
+      state.currentProduct &&
+      getProductKey(state.currentProduct) === sku;
+
+    return `
+      <div class="product-card ${isActive ? "active" : ""}" data-sku="${escapeHtml(sku)}">
+        <img src="${escapeHtml(img)}" alt="${escapeHtml(sku)}" onerror="this.src='';this.alt='Image failed to load';" />
+        <div class="sku">${escapeHtml(sku)}</div>
+        <div class="name">${escapeHtml(name)}</div>
+        <div class="category">${escapeHtml(categoryName)}</div>
+      </div>
+    `;
+  }).join("");
+
+  document.querySelectorAll(".product-card").forEach(card => {
+    card.addEventListener("click", () => {
+      const sku = card.dataset.sku;
+      selectProduct(sku);
+      closeProductBrowser();
+    });
+  });
+}
 
   /********************
    * 选择产品
