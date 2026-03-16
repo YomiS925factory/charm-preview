@@ -133,6 +133,22 @@
       margin-bottom: 16px;
     }
 
+    #fontMetaBox {
+      position: absolute;
+      right: 12px;
+      bottom: 12px;
+      width: 170px;
+      padding: 10px 12px;
+      background: rgba(255, 255, 255, 0.95);
+      border: 2px solid red;
+      border-radius: 8px;
+      font-size: 14px;
+      line-height: 1.6;
+      color: #222;
+      z-index: 9999;
+      display: block;
+    }
+
     #productBaseImage {
       width: 100%;
       height: 100%;
@@ -336,7 +352,14 @@
       <div id="previewWrapper" class="preview-wrapper">
         <img id="productBaseImage" src="" alt="Carved surface rendering" />
         <div id="textLayer">Your Text</div>
-      </div>
+
+        <!-- 新增：右下角参数框 -->
+        <div id="fontMetaBox">
+            <div><strong>Font:</strong> <span id="metaFont">Chunkfive</span></div>
+            <div><strong>Size:</strong> <span id="metaSize">28</span></div>
+            <div><strong>Rotate:</strong> <span id="metaRotation">0</span>°</div>
+        </div>
+     </div>
 
       <div class="preview-actions">
         <button id="downloadBtn" class="btn">Download Preview</button>
@@ -419,6 +442,29 @@
      * 1. 这里改成你的 Google Apps Script Web App 地址
      ********************/
     const API_BASE_URL = "https://script.google.com/macros/s/AKfycbyy8GsTmHeYdgrmFi2wkN5pua7gilVpg-8v44jNucrHkN3XzW0jtcJWYD_JsZnbhiUWrQ/exec";
+
+
+    /***************
+    * 参数显示框更新函数
+    ***************/
+    function updateFontMetaBox() {
+
+      const metaFont = document.getElementById("metaFont");
+      const metaSize = document.getElementById("metaSize");
+      const metaRotation = document.getElementById("metaRotation");
+
+      if (!metaFont || !metaSize || !metaRotation) return;
+
+      // 字体
+      metaFont.textContent = dom.fontSelect ? dom.fontSelect.value : "Arial";
+
+      // 字号
+      metaSize.textContent = state.currentFontSize || 28;
+
+      // 旋转
+      metaRotation.textContent = state.currentRotation || 0;
+
+    }
 
     /********************
      * 全局状态
@@ -713,6 +759,8 @@
      ********************/
     function updateFont(fontName) {
       dom.textLayer.style.fontFamily = fontName || "Arial";
+
+      updateFontMetaBox();
     }
 
     /********************
@@ -724,6 +772,8 @@
       dom.textLayer.style.fontSize = fontSize + "px";
       dom.fontSizeRange.value = fontSize;
       dom.fontSizeInput.value = fontSize;
+
+      updateFontMetaBox();
     }
 
     /********************
@@ -735,11 +785,18 @@
       dom.rotationRange.value = value;
       dom.rotationInput.value = value;
       applyTextTransform();
+
+      updateFontMetaBox();
     }
 
     function applyTextTransform() {
       dom.textLayer.style.transform = `translate(-50%, -50%) rotate(${state.currentRotation}deg)`;
     }
+
+    /* 页面初始化执行 */
+    window.addEventListener("load", function(){
+      updateFontMetaBox();
+    });
 
     /********************
      * 重置文字位置
