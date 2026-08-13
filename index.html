@@ -443,6 +443,96 @@
      ********************/
     const API_BASE_URL = "https://script.google.com/macros/s/AKfycbyy8GsTmHeYdgrmFi2wkN5pua7gilVpg-8v44jNucrHkN3XzW0jtcJWYD_JsZnbhiUWrQ/exec";
 
+    /********************
+     * 与商品目录共用的 Supabase 数据库及图片库存
+     *
+     * 请把下面两项填写为图2商品目录项目在 Vercel 中使用的：
+     * NEXT_PUBLIC_SUPABASE_URL
+     * NEXT_PUBLIC_SUPABASE_ANON_KEY
+     *
+     * 这是浏览器端公开使用的 anon key；Supabase 中仍应开启 RLS，
+     * 并只允许匿名用户读取 products 表及公开图片。
+     ********************/
+    const SUPABASE_URL = "https://pruwayuyvesqymmywlar.supabase.co";
+    const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBydXdheXV5dmVzcXltbXl3bGFyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzcwODA2MTAsImV4cCI6MjA5MjY1NjYxMH0.57RQxPu1rB0yg1Mwimirw1iWBV7jq_RRe4qQXqMUokY";
+    const SHARED_IMAGE_BUCKET = "product-images";
+    const SHARED_IMAGE_FOLDER = "products";
+    const ENGRAVE_SUBCATEGORY = "Engrave";
+
+    function getSharedProductImageUrl(sku) {
+      const safeSku = encodeURIComponent(String(sku || "").trim());
+      return `${SUPABASE_URL}/storage/v1/object/public/${SHARED_IMAGE_BUCKET}/${SHARED_IMAGE_FOLDER}/${safeSku}.webp`;
+    }
+
+    function hasSubcategory(value, expectedSubcategory) {
+      const expected = String(expectedSubcategory || "").trim().toLowerCase();
+
+      return String(value || "")
+        .split(/[,;/|]+/)
+        .map(item => item.trim().toLowerCase())
+        .filter(Boolean)
+        .includes(expected);
+    }
+
+    function validateSupabaseConfig() {
+      const hasUrl = /^https:\/\/.+\.supabase\.co\/?$/i.test(SUPABASE_URL);
+      const hasKey = SUPABASE_ANON_KEY && !SUPABASE_ANON_KEY.startsWith("PASTE_");
+
+      if (!hasUrl || !hasKey) {
+        throw new Error(
+          "请先填写 SUPABASE_URL 和 SUPABASE_ANON_KEY，它们必须与商品目录项目使用的值相同。"
+        );
+      }
+    }
+
+    async function fetchEngraveProductsFromSharedInventory() {
+      validateSupabaseConfig();
+
+      const allProducts = [];
+      const pageSize = 1000;
+      let from = 0;
+
+      while (true) {
+        const url = new URL(`${SUPABASE_URL.replace(/\/$/, "")}/rest/v1/products`);
+        url.searchParams.set(
+          "select",
+          "sku,category,subcategory,color,material,price,sale_price,has_glow,sizes,created_at,updated_at,sort_order"
+        );
+        // 先由数据库缩小范围，避免下载整个 products 表。
+        url.searchParams.set("subcategory", `ilike.*${ENGRAVE_SUBCATEGORY}*`);
+        url.searchParams.set("order", "updated_at.desc,sku.desc");
+
+        const response = await fetch(url.toString(), {
+          headers: {
+            apikey: SUPABASE_ANON_KEY,
+            Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+            Range: `${from}-${from + pageSize - 1}`
+          },
+          cache: "no-cache"
+        });
+
+        if (!response.ok) {
+          const errorText = await response.text();
+          throw new Error(`读取共享 products 表失败 (${response.status})：${errorText}`);
+        }
+
+        const page = await response.json();
+        if (!Array.isArray(page) || page.length === 0) break;
+
+        // 数据库使用模糊匹配以提高兼容性，这里再按独立标签精确过滤。
+        allProducts.push(
+          ...page.filter(product =>
+            product.sku && hasSubcategory(product.subcategory, ENGRAVE_SUBCATEGORY)
+          )
+        );
+
+        if (page.length < pageSize) break;
+        from += pageSize;
+      }
+
+      return allProducts;
+    }
+
 
     /***************
     * 参数显示框更新函数
@@ -534,7 +624,7 @@
         }
       } catch (error) {
         console.error("初始化失败:", error);
-        alert("初始化失败，请检查 Google Apps Script 接口地址和表格数据。");
+        alert(`初始化失败：${error?.message || "请检查数据接口设置。"}`);
       }
     }
 
@@ -549,17 +639,70 @@
      * }
      ********************/
     async function loadAllData() {
-      const url = API_BASE_URL + "?action=init";
-      const res = await fetch(url);
-      if (!res.ok) {
-        throw new Error("接口请求失败");
-      }
-      const data = await res.json();
+      // 两个数据源并行读取：
+      // 1. 原接口只负责字体、雕刻坐标、默认字号等配置；
+      // 2. Supabase products 表负责 SKU、分类和共用图片库存。
+      const [configResponse, sharedProducts] = await Promise.all([
+        fetch(API_BASE_URL + "?action=init", { cache: "no-cache" }),
+        fetchEngraveProductsFromSharedInventory()
+      ]);
 
-      state.products = (data.products || []).filter(p => (p.status || "").toLowerCase() === "active");
-      state.fonts = (data.fonts || []).filter(f => (f.status || "").toLowerCase() === "active");
-      state.categories = (data.categories || []).filter(c => (c.status || "").toLowerCase() === "active");
+      if (!configResponse.ok) {
+        throw new Error("雕刻设置接口请求失败");
+      }
+
+      const data = await configResponse.json();
+      const engravingConfigProducts = Array.isArray(data.products) ? data.products : [];
+      const configBySku = new Map(
+        engravingConfigProducts
+          .filter(product => product && product.sku)
+          .map(product => [String(product.sku).trim().toLowerCase(), product])
+      );
+
+      // SKU 和图片始终以共享 products 表为准；相同 SKU 再合并原来的雕刻参数。
+      state.products = sharedProducts.map(sharedProduct => {
+        const sku = String(sharedProduct.sku || "").trim();
+        const engravingConfig = configBySku.get(sku.toLowerCase()) || {};
+        const sharedImageUrl = getSharedProductImageUrl(sku);
+
+        return {
+          ...engravingConfig,
+          ...sharedProduct,
+          sku,
+          name_cn: engravingConfig.name_cn || "",
+          name_en: engravingConfig.name_en || sku,
+          main_image: sharedImageUrl,
+          thumb_image: sharedImageUrl,
+          preview_image: sharedImageUrl
+        };
+      });
+
+      state.fonts = (data.fonts || []).filter(
+        font => (font.status || "").toLowerCase() === "active"
+      );
       state.settings = data.settings || {};
+
+      // 分类选项同样以共享 products 表中的实际结果为准；
+      // 若原配置中有排序，则继续沿用原来的排序值。
+      const configuredCategories = (data.categories || []).filter(
+        category => (category.status || "").toLowerCase() === "active"
+      );
+      const categoryConfigByName = new Map(
+        configuredCategories.map(category => [
+          String(category.category_name || "").trim().toLowerCase(),
+          category
+        ])
+      );
+      const sharedCategoryNames = Array.from(
+        new Set(state.products.map(product => String(product.category || "").trim()).filter(Boolean))
+      );
+
+      state.categories = sharedCategoryNames.map((categoryName, index) => ({
+        ...(categoryConfigByName.get(categoryName.toLowerCase()) || {}),
+        category_name: categoryName,
+        status: "active",
+        sort: categoryConfigByName.get(categoryName.toLowerCase())?.sort ?? index + 1
+      }));
     }
 
     /********************
@@ -645,7 +788,7 @@
 
       dom.productGrid.innerHTML = filtered.map(product => `
         <div class="product-card ${state.currentProduct && state.currentProduct.sku === product.sku ? "active" : ""}" data-sku="${escapeHtml(product.sku || "")}">
-          <img src="${escapeHtml(product.main_image || product.thumb_image || "")}" alt="${escapeHtml(product.sku || "")}" onerror="this.src='';this.alt='图片加载失败';" />
+          <img src="${escapeHtml(product.main_image || product.thumb_image || "")}" alt="${escapeHtml(product.sku || "")}" loading="lazy" decoding="async" onerror="this.onerror=null;this.src='';this.alt='图片加载失败';" />
           <div class="sku">${escapeHtml(product.sku || "")}</div>
           <div class="name">${escapeHtml(product.name_cn || product.name_en || "")}</div>
           <div class="category">${escapeHtml(product.category || "")}</div>
@@ -692,6 +835,7 @@
      ********************/
     function loadProductPreview(product) {
       dom.productBaseImage.src = product.preview_image || product.main_image || "";
+      dom.productBaseImage.fetchPriority = "high";
     }
 
     /********************
