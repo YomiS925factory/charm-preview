@@ -53,6 +53,14 @@
       background: #1f57b7;
     }
 
+    .btn:disabled,
+    .btn:disabled:hover,
+    input:disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
+      filter: grayscale(1);
+    }
+
     .btn-secondary {
       background: #666;
     }
@@ -173,6 +181,11 @@
       cursor: move;
       user-select: none;
       padding: 4px 8px;
+    }
+
+    #textLayer.text-position-locked {
+      cursor: default;
+      pointer-events: none;
     }
 
     .preview-actions {
@@ -407,7 +420,7 @@
         <input type="color" id="textColor" value="#111111" />
       </div>
 
-      <div class="hint">
+      <div class="hint" id="customizationModeHint">
         Effect display: Engraved area in black.<br />
         You can drag the text position. Rotation is supported from -180° to 180°.
       </div>
@@ -453,15 +466,30 @@
      * 这是浏览器端公开使用的 anon key；Supabase 中仍应开启 RLS，
      * 并只允许匿名用户读取 products 表及公开图片。
      ********************/
+    // 请保留/填回你当前线上文件中已经可用的两个实际值。
     const SUPABASE_URL = "https://pruwayuyvesqymmywlar.supabase.co";
     const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBydXdheXV5dmVzcXltbXl3bGFyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzcwODA2MTAsImV4cCI6MjA5MjY1NjYxMH0.57RQxPu1rB0yg1Mwimirw1iWBV7jq_RRe4qQXqMUokY";
     const SHARED_IMAGE_BUCKET = "product-images";
     const SHARED_IMAGE_FOLDER = "products";
     const ENGRAVE_SUBCATEGORY = "Engrave";
 
+    // 当前页面权限：simple 或 advanced
+    const PAGE_CUSTOMIZATION_MODE = "simple";
+
     function getSharedProductImageUrl(sku) {
       const safeSku = encodeURIComponent(String(sku || "").trim());
       return `${SUPABASE_URL}/storage/v1/object/public/${SHARED_IMAGE_BUCKET}/${SHARED_IMAGE_FOLDER}/${safeSku}.webp`;
+    }
+
+    // A面：ENG-A79.webp；B面：ENG-A79B.webp
+    function getSharedProductSideBImageUrl(sku) {
+      const safeSku = encodeURIComponent(String(sku || "").trim());
+      return `${SUPABASE_URL}/storage/v1/object/public/${SHARED_IMAGE_BUCKET}/${SHARED_IMAGE_FOLDER}/${safeSku}B.webp`;
+    }
+
+    function isEnabledFlag(value) {
+      if (value === true) return true;
+      return ["true", "t", "1", "yes"].includes(String(value || "").trim().toLowerCase());
     }
 
     function hasSubcategory(value, expectedSubcategory) {
@@ -496,7 +524,7 @@
         const url = new URL(`${SUPABASE_URL.replace(/\/$/, "")}/rest/v1/products`);
         url.searchParams.set(
           "select",
-          "sku,category,subcategory,color,material,price,sale_price,has_glow,sizes,created_at,updated_at,sort_order"
+          "sku,category,subcategory,color,material,price,sale_price,has_glow,has_side_b,sizes,created_at,updated_at,sort_order"
         );
         // 先由数据库缩小范围，避免下载整个 products 表。
         url.searchParams.set("subcategory", `ilike.*${ENGRAVE_SUBCATEGORY}*`);
@@ -564,6 +592,7 @@
       fonts: [],
       categories: [],
       settings: {},
+      customizationMode: "simple",
       currentProduct: null,
       currentRotation: 0,
       currentFontSize: 28,
@@ -604,9 +633,53 @@
       rotationInput: document.getElementById("rotationInput"),
       resetRotation: document.getElementById("resetRotation"),
       textColor: document.getElementById("textColor"),
+      customizationModeHint: document.getElementById("customizationModeHint"),
       downloadBtn: document.getElementById("downloadBtn"),
       resetTextPositionBtn: document.getElementById("resetTextPositionBtn")
     };
+
+    /********************
+     * 普通用户 / 高级用户模式
+     * Google设置中：customization_mode = simple 或 advanced
+     * 未设置时默认 simple，普通用户只能输入文字和选择字体。
+     ********************/
+    function normalizeCustomizationMode(value) {
+      return String(value || "").trim().toLowerCase() === "advanced"
+        ? "advanced"
+        : "simple";
+    }
+
+    function isAdvancedCustomizationMode() {
+      return state.customizationMode === "advanced";
+    }
+
+    function applyCustomizationPermissions() {
+      const advanced = isAdvancedCustomizationMode();
+      const locked = !advanced;
+
+      dom.fontSizeRange.disabled = locked;
+      dom.fontSizeInput.disabled = locked;
+      dom.rotationRange.disabled = locked;
+      dom.rotationInput.disabled = locked;
+      dom.resetRotation.disabled = locked;
+      dom.textColor.disabled = locked;
+      dom.resetTextPositionBtn.disabled = locked;
+
+      dom.textLayer.classList.toggle("text-position-locked", locked);
+
+      if (locked) {
+        state.drag.active = false;
+        document.body.style.userSelect = "";
+        dom.textColor.value = "#111111";
+        dom.textLayer.style.color = "#111111";
+      }
+
+      if (dom.customizationModeHint) {
+        dom.customizationModeHint.innerHTML = advanced
+          ? "Effect display: Engraved area in black.<br />You can adjust font size, rotation, color and text position."
+          : "Font size, rotation, color and text position are fixed for this product.<br />You only need to enter the engraving text and select a font.";
+      }
+    }
 
     /********************
      * 初始化
@@ -618,6 +691,7 @@
         renderFontOptions();
         renderProductBrowser();
         bindEvents();
+        applyCustomizationPermissions();
 
         if (state.products.length > 0) {
           selectProduct(state.products[0].sku);
@@ -663,17 +737,23 @@
       state.products = sharedProducts.map(sharedProduct => {
         const sku = String(sharedProduct.sku || "").trim();
         const engravingConfig = configBySku.get(sku.toLowerCase()) || {};
-        const sharedImageUrl = getSharedProductImageUrl(sku);
+        const sideAImageUrl = getSharedProductImageUrl(sku);
+        const hasSideB = isEnabledFlag(sharedProduct.has_side_b);
+        const engravingPreviewImageUrl = hasSideB
+          ? getSharedProductSideBImageUrl(sku)
+          : sideAImageUrl;
 
         return {
           ...engravingConfig,
           ...sharedProduct,
           sku,
+          has_side_b: hasSideB,
           name_cn: engravingConfig.name_cn || "",
           name_en: engravingConfig.name_en || sku,
-          main_image: sharedImageUrl,
-          thumb_image: sharedImageUrl,
-          preview_image: sharedImageUrl
+          // 产品浏览器和左侧缩略图显示A面，雕刻预览区显示实际雕刻面。
+          main_image: sideAImageUrl,
+          thumb_image: sideAImageUrl,
+          preview_image: engravingPreviewImageUrl
         };
       });
 
@@ -681,6 +761,9 @@
         font => (font.status || "").toLowerCase() === "active"
       );
       state.settings = data.settings || {};
+      state.customizationMode = normalizeCustomizationMode(
+        PAGE_CUSTOMIZATION_MODE
+      );
 
       // 分类选项同样以共享 products 表中的实际结果为准；
       // 若原配置中有排序，则继续沿用原来的排序值。
@@ -834,7 +917,15 @@
      * 加载预览图
      ********************/
     function loadProductPreview(product) {
-      dom.productBaseImage.src = product.preview_image || product.main_image || "";
+      const sideAImageUrl = product.main_image || getSharedProductImageUrl(product.sku);
+      const previewImageUrl = product.preview_image || sideAImageUrl;
+
+      dom.productBaseImage.onerror = () => {
+        // B面文件缺失或命名错误时回退A面，避免显示破图。
+        dom.productBaseImage.onerror = null;
+        dom.productBaseImage.src = sideAImageUrl;
+      };
+      dom.productBaseImage.src = previewImageUrl;
       dom.productBaseImage.fetchPriority = "high";
     }
 
@@ -998,6 +1089,8 @@
       const wrapper = dom.previewWrapper;
 
       textLayer.addEventListener("mousedown", (e) => {
+        if (!isAdvancedCustomizationMode()) return;
+
         state.drag.active = true;
 
         const textRect = textLayer.getBoundingClientRect();
@@ -1008,7 +1101,7 @@
       });
 
       document.addEventListener("mousemove", (e) => {
-        if (!state.drag.active) return;
+        if (!isAdvancedCustomizationMode() || !state.drag.active) return;
 
         const wrapperRect = wrapper.getBoundingClientRect();
         const x = e.clientX - wrapperRect.left - state.drag.offsetX + textLayer.offsetWidth / 2;
@@ -1069,31 +1162,40 @@ dom.fontSelect.addEventListener("keyup", (e) => {
       });
 
       dom.fontSizeRange.addEventListener("input", (e) => {
+        if (!isAdvancedCustomizationMode()) return;
         updateFontSize(e.target.value);
       });
 
       dom.fontSizeInput.addEventListener("input", (e) => {
+        if (!isAdvancedCustomizationMode()) return;
         updateFontSize(e.target.value);
       });
 
       dom.rotationRange.addEventListener("input", (e) => {
+        if (!isAdvancedCustomizationMode()) return;
         updateRotation(e.target.value);
       });
 
       dom.rotationInput.addEventListener("input", (e) => {
+        if (!isAdvancedCustomizationMode()) return;
         updateRotation(e.target.value);
       });
 
       dom.resetRotation.addEventListener("click", () => {
+        if (!isAdvancedCustomizationMode()) return;
         updateRotation(0);
       });
 
       dom.textColor.addEventListener("input", (e) => {
+        if (!isAdvancedCustomizationMode()) return;
         dom.textLayer.style.color = e.target.value;
       });
 
       dom.downloadBtn.addEventListener("click", downloadPreview);
-      dom.resetTextPositionBtn.addEventListener("click", resetTextPosition);
+      dom.resetTextPositionBtn.addEventListener("click", () => {
+        if (!isAdvancedCustomizationMode()) return;
+        resetTextPosition();
+      });
 
       enableTextDragging();
     }
