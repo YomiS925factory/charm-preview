@@ -653,33 +653,39 @@
       return state.customizationMode === "advanced";
     }
 
-    function applyCustomizationPermissions() {
-      const advanced = isAdvancedCustomizationMode();
-      const locked = !advanced;
+function applyCustomizationPermissions() {
+  const advanced = isAdvancedCustomizationMode();
+  const locked = !advanced;
 
-      dom.fontSizeRange.disabled = locked;
-      dom.fontSizeInput.disabled = locked;
-      dom.rotationRange.disabled = locked;
-      dom.rotationInput.disabled = locked;
-      dom.resetRotation.disabled = locked;
-      dom.textColor.disabled = locked;
-      dom.resetTextPositionBtn.disabled = locked;
+  // 简单模式继续锁定这些功能
+  dom.fontSizeRange.disabled = locked;
+  dom.fontSizeInput.disabled = locked;
+  dom.rotationRange.disabled = locked;
+  dom.rotationInput.disabled = locked;
+  dom.resetRotation.disabled = locked;
+  dom.textColor.disabled = locked;
 
-      dom.textLayer.classList.toggle("text-position-locked", locked);
+  // 简单模式和高级模式都允许拖动文字
+  const allowTextDragging = true;
 
-      if (locked) {
-        state.drag.active = false;
-        document.body.style.userSelect = "";
-        dom.textColor.value = "#111111";
-        dom.textLayer.style.color = "#111111";
-      }
+  dom.resetTextPositionBtn.disabled = !allowTextDragging;
 
-      if (dom.customizationModeHint) {
-        dom.customizationModeHint.innerHTML = advanced
-          ? "Effect display: Engraved area in black.<br />You can adjust font size, rotation, color and text position."
-          : "Font size, rotation, color and text position are fixed for this product.<br />You only need to enter the engraving text and select a font.";
-      }
-    }
+  dom.textLayer.classList.toggle(
+    "text-position-locked",
+    !allowTextDragging
+  );
+
+  if (locked) {
+    dom.textColor.value = "#111111";
+    dom.textLayer.style.color = "#111111";
+  }
+
+  if (dom.customizationModeHint) {
+    dom.customizationModeHint.innerHTML = advanced
+      ? "Effect display: Engraved area in black.<br />You can adjust font size, rotation, color and text position."
+      : "Font size, rotation and color are fixed for this product.<br />You can enter the engraving text, select a font and drag the text to a suitable position.";
+  }
+}
 
     /********************
      * 初始化
@@ -1089,11 +1095,10 @@
       const wrapper = dom.previewWrapper;
 
       textLayer.addEventListener("mousedown", (e) => {
-        if (!isAdvancedCustomizationMode()) return;
-
         state.drag.active = true;
 
         const textRect = textLayer.getBoundingClientRect();
+
         state.drag.offsetX = e.clientX - textRect.left;
         state.drag.offsetY = e.clientY - textRect.top;
 
@@ -1101,14 +1106,24 @@
       });
 
       document.addEventListener("mousemove", (e) => {
-        if (!isAdvancedCustomizationMode() || !state.drag.active) return;
+        if (!state.drag.active) return;
 
         const wrapperRect = wrapper.getBoundingClientRect();
-        const x = e.clientX - wrapperRect.left - state.drag.offsetX + textLayer.offsetWidth / 2;
-        const y = e.clientY - wrapperRect.top - state.drag.offsetY + textLayer.offsetHeight / 2;
 
-        dom.textLayer.style.left = x + "px";
-        dom.textLayer.style.top = y + "px";
+        const x =
+          e.clientX -
+          wrapperRect.left -
+          state.drag.offsetX +
+          textLayer.offsetWidth / 2;
+
+        const y =
+          e.clientY -
+          wrapperRect.top -
+          state.drag.offsetY +
+          textLayer.offsetHeight / 2;
+
+        textLayer.style.left = x + "px";
+        textLayer.style.top = y + "px";
       });
 
       document.addEventListener("mouseup", () => {
@@ -1192,10 +1207,10 @@ dom.fontSelect.addEventListener("keyup", (e) => {
       });
 
       dom.downloadBtn.addEventListener("click", downloadPreview);
-      dom.resetTextPositionBtn.addEventListener("click", () => {
-        if (!isAdvancedCustomizationMode()) return;
-        resetTextPosition();
-      });
+      dom.resetTextPositionBtn.addEventListener(
+        "click",
+        resetTextPosition
+      );
 
       enableTextDragging();
     }
